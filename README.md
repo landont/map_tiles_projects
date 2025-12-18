@@ -2,6 +2,12 @@
 
 This repository contains example projects demonstrating the use of the **0015__map_tiles** component ([ESP Registry](https://components.espressif.com/components/0015/map_tiles)) for interactive map display on ESP32 devices.
 
+<div align="center">
+
+[![Demo](misc/demo.gif)](https://youtu.be/ldWUl3tLEAc)
+
+</div>
+
 ## Repository Structure
 
 This repository is organized into separate example projects, each showcasing different use cases and hardware configurations:
@@ -22,13 +28,14 @@ map_tiles_projects/
 
 A comprehensive example demonstrating interactive map display with touch controls, real-time GPS coordinate tracking, zoom functionality, and manual coordinate entry. Supports multiple ESP32 development boards with different display configurations.
 
-**[View Project →](01.Simple_Map/)**
+**[View Project →](01.Simple_Map/)** | **[Watch Demo →](https://youtu.be/Kyjf24e-Poo)**
 
 ### 02.ESP32-S3_Map_LoRa_GPS
 
 An advanced example integrating map display with LoRa wireless communication and GPS tracking capabilities on ESP32-S3.
 
-**[View Project →](02.ESP32-S3_Map_LoRa_GPS/)**
+**[View Project →](02.ESP32-S3_Map_LoRa_GPS/)** | **[Watch Demo →](https://youtu.be/KDNXQfUJcSY)**
+
 
 ## About the Map Tiles Component
 
