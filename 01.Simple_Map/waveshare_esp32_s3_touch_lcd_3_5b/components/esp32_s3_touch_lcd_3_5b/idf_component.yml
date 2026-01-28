@@ -1,0 +1,12 @@
+version: "1.0.0"
+description: BSP for Waveshare ESP32-S3-Touch-LCD-3.5B
+url: https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-3.5B
+dependencies:
+  idf:
+    version: ">=5.4"
+  esp_lcd_axs15231b:
+    version: "^2.0.2"
+  esp_lvgl_port:
+    version: "^2.4.1"
+  lvgl:
+    version: "^9.3.0"

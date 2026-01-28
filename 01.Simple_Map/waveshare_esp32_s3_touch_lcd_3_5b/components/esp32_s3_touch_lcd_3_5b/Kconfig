@@ -1,0 +1,76 @@
+menu "Board Support Package (Waveshare ESP32-S3-Touch-LCD-3.5B)"
+
+    config BSP_I2C_NUM
+        int "I2C peripheral number"
+        default 0
+        range 0 1
+        help
+            The I2C peripheral used for onboard peripherals.
+
+    config BSP_I2C_CLK_SPEED_HZ
+        int "I2C clock speed in Hz"
+        default 400000
+        range 100000 1000000
+        help
+            I2C clock speed in Hz.
+
+    menu "Display Configuration"
+        config BSP_DISPLAY_LVGL_BUF_HEIGHT
+            int "LVGL buffer height"
+            default 100
+            range 10 480
+            help
+                Height of the LVGL buffer in pixels.
+
+        config BSP_DISPLAY_LVGL_TICK
+            int "LVGL tick period (ms)"
+            default 2
+            range 1 100
+            help
+                LVGL tick period in milliseconds.
+
+        config BSP_DISPLAY_LVGL_MAX_SLEEP
+            int "LVGL max sleep (ms)"
+            default 500
+            range 100 5000
+            help
+                Maximum sleep time for LVGL in milliseconds.
+
+        config BSP_DISPLAY_BRIGHTNESS_LEDC_CH
+            int "LEDC channel for backlight"
+            default 1
+            range 0 7
+            help
+                LEDC channel used for controlling the backlight brightness.
+    endmenu
+
+    menu "SD Card Configuration"
+        config BSP_SD_MOUNT_POINT
+            string "SD card mount point"
+            default "/sdcard"
+            help
+                Mount point for the SD card filesystem.
+    endmenu
+
+    menu "SPIFFS Configuration"
+        config BSP_SPIFFS_MOUNT_POINT
+            string "SPIFFS mount point"
+            default "/spiffs"
+            help
+                Mount point for the SPIFFS filesystem.
+
+        config BSP_SPIFFS_PARTITION_LABEL
+            string "SPIFFS partition label"
+            default "storage"
+            help
+                Partition label for SPIFFS.
+
+        config BSP_SPIFFS_MAX_FILES
+            int "Maximum number of open files"
+            default 5
+            range 1 10
+            help
+                Maximum number of files that can be open at the same time.
+    endmenu
+
+endmenu
