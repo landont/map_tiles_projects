@@ -8,6 +8,8 @@ dependencies:
     version: "^2.0.2"
   espressif/esp_lvgl_port:
     version: "^2.4.1"
+  espressif/esp_io_expander:
+    version: "^1.0.0"
   espressif/esp_io_expander_tca9554:
     version: "^2.0.0"
   lvgl/lvgl:
