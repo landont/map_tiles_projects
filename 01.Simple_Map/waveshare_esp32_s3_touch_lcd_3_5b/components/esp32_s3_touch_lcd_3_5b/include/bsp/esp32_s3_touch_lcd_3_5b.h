@@ -50,10 +50,13 @@
 /* Touch - integrated in AXS15231B, uses I2C */
 #define BSP_LCD_TOUCH_INT     (GPIO_NUM_NC)
 
-/* SD Card (SD_MMC interface) */
-#define BSP_SD_D0             (GPIO_NUM_11)
-#define BSP_SD_CMD            (GPIO_NUM_13)
-#define BSP_SD_CLK            (GPIO_NUM_14)
+/* SD Card (SD_MMC interface) - 1-bit mode
+ * NOTE: These pins need to be verified from Waveshare schematic/demo code
+ * Download demo from: https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-3.5B
+ */
+#define BSP_SD_D0             (GPIO_NUM_16)
+#define BSP_SD_CMD            (GPIO_NUM_17)
+#define BSP_SD_CLK            (GPIO_NUM_18)
 
 /* LVGL buffer height configuration */
 #define LVGL_BUFFER_HEIGHT    (CONFIG_BSP_DISPLAY_LVGL_BUF_HEIGHT)
