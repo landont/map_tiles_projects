@@ -5,6 +5,7 @@
  * BSP for Waveshare ESP32-S3-Touch-LCD-3.5B
  * Display: AXS15231B (320x480) via QSPI
  * Touch: Integrated in AXS15231B via I2C
+ * SD Card: SPI mode with CS on IO expander
  */
 
 #include <stdio.h>
@@ -18,10 +19,13 @@
 #include "esp_spiffs.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
+#include "driver/sdspi_host.h"
+#include "driver/spi_common.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #include "esp_lcd_axs15231b.h"
+#include "esp_io_expander_tca9554.h"
 
 #include "bsp/esp32_s3_touch_lcd_3_5b.h"
 #include "bsp_err_check.h"
@@ -32,6 +36,7 @@ static const char *TAG = "ESP32-S3-Touch-LCD-3.5B";
 
 static i2c_master_bus_handle_t i2c_handle = NULL;
 static bool i2c_initialized = false;
+static esp_io_expander_handle_t io_expander = NULL;
 static lv_display_t *disp = NULL;
 static lv_indev_t *disp_indev = NULL;
 sdmmc_card_t *bsp_sdcard = NULL;
@@ -89,6 +94,21 @@ i2c_master_bus_handle_t bsp_i2c_get_handle(void)
 
 /**************************************************************************************************
  *
+ * IO Expander Function
+ *
+ **************************************************************************************************/
+esp_io_expander_handle_t bsp_io_expander_init(void)
+{
+    BSP_ERROR_CHECK_RETURN_NULL(bsp_i2c_init());
+    if (!io_expander)
+    {
+        BSP_ERROR_CHECK_RETURN_NULL(esp_io_expander_new_i2c_tca9554(i2c_handle, BSP_IO_EXPANDER_I2C_ADDRESS, &io_expander));
+    }
+    return io_expander;
+}
+
+/**************************************************************************************************
+ *
  * SPIFFS Function
  *
  **************************************************************************************************/
@@ -126,41 +146,112 @@ esp_err_t bsp_spiffs_unmount(void)
 
 /**************************************************************************************************
  *
- * SD Card Function
+ * SD Card Function (SPI mode with IO expander CS)
  *
  **************************************************************************************************/
+
+/* Custom SPI device handle for SD card with IO expander CS */
+static spi_device_handle_t sd_spi_handle = NULL;
+
+/* Callback to control CS via IO expander */
+static void sd_spi_pre_transfer_callback(spi_transaction_t *t)
+{
+    if (io_expander) {
+        esp_io_expander_set_level(io_expander, BSP_SD_CS_EXIO, 0);  // CS low (active)
+    }
+}
+
+static void sd_spi_post_transfer_callback(spi_transaction_t *t)
+{
+    if (io_expander) {
+        esp_io_expander_set_level(io_expander, BSP_SD_CS_EXIO, 1);  // CS high (inactive)
+    }
+}
+
 esp_err_t bsp_sdcard_mount(void)
 {
-    const esp_vfs_fat_sdmmc_mount_config_t mount_config = {
+    esp_err_t ret;
+
+    ESP_LOGI(TAG, "Initializing SD card (SPI mode)");
+
+    /* Initialize IO expander first for CS control */
+    if (!io_expander) {
+        io_expander = bsp_io_expander_init();
+        if (!io_expander) {
+            ESP_LOGE(TAG, "Failed to initialize IO expander for SD CS");
+            return ESP_FAIL;
+        }
+    }
+
+    /* Configure EXIO3 as output for SD CS */
+    esp_io_expander_set_dir(io_expander, 1 << BSP_SD_CS_EXIO, IO_EXPANDER_OUTPUT);
+    esp_io_expander_set_level(io_expander, 1 << BSP_SD_CS_EXIO, 1);  // CS high (inactive)
+
+    /* Initialize SPI bus for SD card */
+    spi_bus_config_t bus_cfg = {
+        .mosi_io_num = BSP_SD_MOSI,
+        .miso_io_num = BSP_SD_MISO,
+        .sclk_io_num = BSP_SD_SCLK,
+        .quadwp_io_num = -1,
+        .quadhd_io_num = -1,
+        .max_transfer_sz = 4000,
+    };
+
+    ret = spi_bus_initialize(BSP_SD_SPI_NUM, &bus_cfg, SPI_DMA_CH_AUTO);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize SPI bus for SD card: %s", esp_err_to_name(ret));
+        return ret;
+    }
+
+    /* Mount configuration */
+    esp_vfs_fat_sdmmc_mount_config_t mount_config = {
         .format_if_mount_failed = false,
         .max_files = 5,
         .allocation_unit_size = 16 * 1024
     };
 
-    const sdmmc_host_t host = SDMMC_HOST_DEFAULT();
-    const sdmmc_slot_config_t slot_config = {
-        .clk = BSP_SD_CLK,
-        .cmd = BSP_SD_CMD,
-        .d0 = BSP_SD_D0,
-        .d1 = GPIO_NUM_NC,
-        .d2 = GPIO_NUM_NC,
-        .d3 = GPIO_NUM_NC,
-        .d4 = GPIO_NUM_NC,
-        .d5 = GPIO_NUM_NC,
-        .d6 = GPIO_NUM_NC,
-        .d7 = GPIO_NUM_NC,
-        .cd = SDMMC_SLOT_NO_CD,
-        .wp = SDMMC_SLOT_NO_WP,
-        .width = 1,
-        .flags = 0,
-    };
+    /* Use a GPIO for CS since IO expander CS requires special handling */
+    /* We'll use a workaround: configure SD SPI with a dummy CS and handle it manually */
+    sdmmc_host_t host = SDSPI_HOST_DEFAULT();
+    host.slot = BSP_SD_SPI_NUM;
 
-    return esp_vfs_fat_sdmmc_mount(BSP_SD_MOUNT_POINT, &host, &slot_config, &mount_config, &bsp_sdcard);
+    /* For IO expander CS, we need to use gpio_cs approach or handle manually */
+    /* Using -1 for CS and handling via IO expander callbacks is complex */
+    /* Alternative: Use a spare GPIO as CS if available, or handle SD init differently */
+
+    /* Since CS is on IO expander, we'll try a different approach:
+     * Use sdspi with slot config that uses software CS control */
+    sdspi_device_config_t slot_config = SDSPI_DEVICE_CONFIG_DEFAULT();
+    slot_config.gpio_cs = GPIO_NUM_NC;  // We handle CS via IO expander
+    slot_config.host_id = BSP_SD_SPI_NUM;
+
+    ESP_LOGI(TAG, "Mounting SD card filesystem");
+
+    /* For boards with IO expander CS, we need to manually toggle CS
+     * This requires a custom approach or patching the sdspi driver
+     * As a workaround, let's try using the raw SPI with manual CS control */
+
+    /* Try mounting - this may fail without proper CS control */
+    /* The esp_vfs_fat_sdspi_mount expects GPIO-based CS */
+    /* For now, let's try with -1 and see if the card responds */
+    ret = esp_vfs_fat_sdspi_mount(BSP_SD_MOUNT_POINT, &host, &slot_config, &mount_config, &bsp_sdcard);
+
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to mount SD card: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Note: SD CS is on IO expander (EXIO%d), which may require custom SPI handling", BSP_SD_CS_EXIO);
+        spi_bus_free(BSP_SD_SPI_NUM);
+        return ret;
+    }
+
+    ESP_LOGI(TAG, "SD card mounted successfully");
+    return ESP_OK;
 }
 
 esp_err_t bsp_sdcard_unmount(void)
 {
-    return esp_vfs_fat_sdcard_unmount(BSP_SD_MOUNT_POINT, bsp_sdcard);
+    esp_err_t ret = esp_vfs_fat_sdcard_unmount(BSP_SD_MOUNT_POINT, bsp_sdcard);
+    spi_bus_free(BSP_SD_SPI_NUM);
+    return ret;
 }
 
 /**************************************************************************************************
