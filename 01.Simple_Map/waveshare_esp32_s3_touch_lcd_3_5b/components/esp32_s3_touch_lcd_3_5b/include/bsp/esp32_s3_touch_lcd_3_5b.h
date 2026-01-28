@@ -4,7 +4,6 @@
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "driver/sdmmc_host.h"
-#include "driver/sdspi_host.h"
 
 #include "bsp/config.h"
 #include "bsp/display.h"
@@ -53,14 +52,12 @@
 /* Touch - integrated in AXS15231B, uses I2C */
 #define BSP_LCD_TOUCH_INT     (GPIO_NUM_NC)
 
-/* SD Card (SPI interface) - directly connected except CS via IO expander */
-#define BSP_SD_MISO           (GPIO_NUM_9)
-#define BSP_SD_MOSI           (GPIO_NUM_10)
-#define BSP_SD_SCLK           (GPIO_NUM_11)
-#define BSP_SD_CS_EXIO        (3)  /* EXIO3 on IO expander */
-#define BSP_SD_SPI_NUM        (SPI3_HOST)
+/* SD Card (SDMMC native interface - 1-bit mode) */
+#define BSP_SD_CLK            (GPIO_NUM_11)
+#define BSP_SD_CMD            (GPIO_NUM_10)
+#define BSP_SD_D0             (GPIO_NUM_9)
 
-/* IO Expander - TCA9554 */
+/* IO Expander - TCA9554 (for other peripherals, not SD card) */
 #define BSP_IO_EXPANDER_I2C_ADDRESS     (0x20)  /* TCA9554 default address */
 
 /* LVGL buffer height configuration */
