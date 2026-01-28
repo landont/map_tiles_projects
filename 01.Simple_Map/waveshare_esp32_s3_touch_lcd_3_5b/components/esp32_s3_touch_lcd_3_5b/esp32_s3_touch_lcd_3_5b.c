@@ -48,6 +48,7 @@ static esp_lcd_panel_io_handle_t io_handle = NULL;
 #define LCD_LEDC_CH (CONFIG_BSP_DISPLAY_BRIGHTNESS_LEDC_CH)
 #define LVGL_TICK_PERIOD_MS (CONFIG_BSP_DISPLAY_LVGL_TICK)
 #define LVGL_MAX_SLEEP_MS (CONFIG_BSP_DISPLAY_LVGL_MAX_SLEEP)
+#define LCD_PIXEL_CLOCK_HZ (40 * 1000 * 1000)  /* 40 MHz pixel clock for AXS15231B */
 
 /* Custom initialization commands for AXS15231B on ESP32-S3-Touch-LCD-3.5B */
 static const axs15231b_lcd_init_cmd_t lcd_init_cmds[] = {
@@ -331,11 +332,12 @@ esp_err_t bsp_display_new(const bsp_display_config_t *config, esp_lcd_panel_hand
     ESP_ERROR_CHECK(spi_bus_initialize(BSP_LCD_SPI_NUM, &buscfg, SPI_DMA_CH_AUTO));
 
     // Configure panel IO for QSPI
-    const esp_lcd_panel_io_spi_config_t io_config = AXS15231B_PANEL_IO_QSPI_CONFIG(
+    esp_lcd_panel_io_spi_config_t io_config = AXS15231B_PANEL_IO_QSPI_CONFIG(
         BSP_LCD_CS,
         NULL,  // callback
         NULL   // callback context
     );
+    io_config.pclk_hz = LCD_PIXEL_CLOCK_HZ;  // Explicitly set 40 MHz pixel clock
 
     // Vendor-specific configuration for AXS15231B with custom init commands
     axs15231b_vendor_config_t vendor_config = {
@@ -359,7 +361,8 @@ esp_err_t bsp_display_new(const bsp_display_config_t *config, esp_lcd_panel_hand
 
     esp_lcd_panel_reset(panel_handle);
     esp_lcd_panel_init(panel_handle);
-    esp_lcd_panel_disp_on_off(panel_handle, true);
+    // Don't turn on display here - LVGL port will handle it
+    esp_lcd_panel_disp_on_off(panel_handle, false);
 
     if (ret_panel)
     {
