@@ -57,8 +57,9 @@
 #define BSP_SD_CMD            (GPIO_NUM_10)
 #define BSP_SD_D0             (GPIO_NUM_9)
 
-/* IO Expander - TCA9554 (for other peripherals, not SD card) */
-#define BSP_IO_EXPANDER_I2C_ADDRESS     (0x20)  /* TCA9554 default address */
+/* IO Expander - TCA9554 */
+#define BSP_IO_EXPANDER_I2C_ADDRESS     (0x20)  /* TCA9554 default address (A0=A1=A2=GND) */
+#define BSP_LCD_RST_EXIO                (1)     /* LCD Reset on EXIO1 (IO expander pin 1) */
 
 /* LVGL buffer height configuration */
 #define LVGL_BUFFER_HEIGHT    (CONFIG_BSP_DISPLAY_LVGL_BUF_HEIGHT)

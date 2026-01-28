@@ -304,6 +304,21 @@ esp_err_t bsp_display_new(const bsp_display_config_t *config, esp_lcd_panel_hand
 
     ESP_LOGI(TAG, "Initialize QSPI bus for AXS15231B display");
 
+    /* Initialize IO expander and reset LCD via EXIO1 */
+    if (!io_expander) {
+        io_expander = bsp_io_expander_init();
+    }
+    if (io_expander) {
+        ESP_LOGI(TAG, "Resetting LCD via IO expander (EXIO1)");
+        esp_io_expander_set_dir(io_expander, 1 << BSP_LCD_RST_EXIO, IO_EXPANDER_OUTPUT);
+        esp_io_expander_set_level(io_expander, 1 << BSP_LCD_RST_EXIO, 0);  // Reset LOW
+        vTaskDelay(pdMS_TO_TICKS(100));
+        esp_io_expander_set_level(io_expander, 1 << BSP_LCD_RST_EXIO, 1);  // Reset HIGH
+        vTaskDelay(pdMS_TO_TICKS(200));
+    } else {
+        ESP_LOGW(TAG, "IO expander not available, skipping LCD reset");
+    }
+
     // Configure SPI bus for QSPI operation
     const spi_bus_config_t buscfg = AXS15231B_PANEL_BUS_QSPI_CONFIG(
         BSP_LCD_PCLK,
