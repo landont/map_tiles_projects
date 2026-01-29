@@ -421,37 +421,16 @@ static void gps_poll_task(void *pvParameters)
             // Error occurred
             consecutive_errors++;
             if (consecutive_errors >= 3) {
-                ESP_LOGW(TAG, "Multiple consecutive errors (%d), recreating I2C device handles...", consecutive_errors);
+                ESP_LOGW(TAG, "Multiple consecutive errors (%d), resetting I2C bus...", consecutive_errors);
 
-                // Remove and recreate device handles to reset I2C state
-                if (i2c_dev_read) {
-                    i2c_master_bus_rm_device(i2c_dev_read);
-                    i2c_dev_read = NULL;
-                }
-                if (i2c_dev_write) {
-                    i2c_master_bus_rm_device(i2c_dev_write);
-                    i2c_dev_write = NULL;
+                // Reset the I2C bus to clear any stuck state
+                esp_err_t reset_ret = i2c_master_bus_reset(i2c_bus_handle);
+                if (reset_ret == ESP_OK) {
+                    ESP_LOGI(TAG, "I2C bus reset successful");
+                } else {
+                    ESP_LOGW(TAG, "I2C bus reset failed: %s", esp_err_to_name(reset_ret));
                 }
 
-                vTaskDelay(pdMS_TO_TICKS(100));
-
-                // Recreate write device
-                i2c_device_config_t dev_cfg_write = {
-                    .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-                    .device_address = GPS_I2C_ADDR_WRITE,
-                    .scl_speed_hz = 100000,
-                };
-                i2c_master_bus_add_device(i2c_bus_handle, &dev_cfg_write, &i2c_dev_write);
-
-                // Recreate read device
-                i2c_device_config_t dev_cfg_read = {
-                    .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-                    .device_address = GPS_I2C_ADDR_READ,
-                    .scl_speed_hz = 100000,
-                };
-                i2c_master_bus_add_device(i2c_bus_handle, &dev_cfg_read, &i2c_dev_read);
-
-                ESP_LOGI(TAG, "Device handles recreated, retrying...");
                 consecutive_errors = 0;
                 vTaskDelay(pdMS_TO_TICKS(500));
             }
