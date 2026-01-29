@@ -15,9 +15,11 @@ static const char *TAG = "GPS_LC76G_I2C";
 
 static bool gps_initialized = false;
 static gps_data_t current_gps_data = {0};
+static i2c_master_bus_handle_t i2c_bus_handle = NULL;  // Store bus handle for recovery
 static i2c_master_dev_handle_t i2c_dev_write = NULL;  // Device handle for 0x50 (write)
 static i2c_master_dev_handle_t i2c_dev_read = NULL;   // Device handle for 0x54 (read)
 static TaskHandle_t gps_task_handle = NULL;
+static int consecutive_errors = 0;
 static gps_data_callback_t data_callback = NULL;
 static void *data_callback_user_data = NULL;
 static gps_nmea_callback_t nmea_callback = NULL;
@@ -388,6 +390,8 @@ static void gps_poll_task(void *pvParameters)
         esp_err_t ret = gps_i2c_read_nmea(nmea_buffer, 2047, &bytes_read);
 
         if (ret == ESP_OK && bytes_read > 0) {
+            consecutive_errors = 0;  // Reset error counter on success
+
             // Log first 60 chars of data for debugging
             char preview[61];
             size_t preview_len = bytes_read < 60 ? bytes_read : 60;
@@ -410,6 +414,17 @@ static void gps_poll_task(void *pvParameters)
                 line = strtok(NULL, "\r\n");
             }
             ESP_LOGI(TAG, "Parsed %d NMEA sentences", sentence_count);
+        } else if (ret == ESP_OK && bytes_read == 0) {
+            // No data available, this is normal
+            consecutive_errors = 0;
+        } else {
+            // Error occurred
+            consecutive_errors++;
+            if (consecutive_errors >= 3) {
+                ESP_LOGW(TAG, "Multiple consecutive errors (%d), waiting for I2C bus to stabilize...", consecutive_errors);
+                vTaskDelay(pdMS_TO_TICKS(1000));  // Wait longer before retry
+                consecutive_errors = 0;  // Reset and try again
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(poll_interval));
@@ -432,6 +447,9 @@ esp_err_t gps_i2c_init(i2c_master_bus_handle_t i2c_bus)
     }
 
     ESP_LOGI(TAG, "Initializing LC76G GNSS module via I2C...");
+
+    // Save bus handle for potential recovery
+    i2c_bus_handle = i2c_bus;
 
     // Add GPS write device at address 0x50
     i2c_device_config_t dev_cfg_write = {
