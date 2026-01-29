@@ -293,6 +293,56 @@ static void parse_nmea_sentence(const char *sentence)
     }
 }
 
+// Recreate I2C device handles - called when bus gets into bad state
+static void recreate_i2c_devices(void)
+{
+    ESP_LOGW(TAG, "Recreating I2C device handles...");
+
+    // Remove existing handles
+    if (i2c_dev_read) {
+        i2c_master_bus_rm_device(i2c_dev_read);
+        i2c_dev_read = NULL;
+    }
+    if (i2c_dev_write) {
+        i2c_master_bus_rm_device(i2c_dev_write);
+        i2c_dev_write = NULL;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(50));
+
+    // Reset bus
+    i2c_master_bus_reset(i2c_bus_handle);
+
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    // Recreate write device
+    i2c_device_config_t dev_cfg_write = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = GPS_I2C_ADDR_WRITE,
+        .scl_speed_hz = 100000,
+    };
+    esp_err_t ret = i2c_master_bus_add_device(i2c_bus_handle, &dev_cfg_write, &i2c_dev_write);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to recreate write device: %s", esp_err_to_name(ret));
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(50));
+
+    // Recreate read device
+    i2c_device_config_t dev_cfg_read = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = GPS_I2C_ADDR_READ,
+        .scl_speed_hz = 100000,
+    };
+    ret = i2c_master_bus_add_device(i2c_bus_handle, &dev_cfg_read, &i2c_dev_read);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to recreate read device: %s", esp_err_to_name(ret));
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(100));
+    ESP_LOGI(TAG, "I2C device handles recreated");
+}
+
 // Read NMEA data from LC76G via I2C using transmit_receive for combined operations
 static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *bytes_read)
 {
@@ -305,21 +355,31 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
         return ESP_ERR_INVALID_STATE;
     }
 
+    // Probe the GPS module first to ensure bus is in good state
+    ret = i2c_master_probe(i2c_bus_handle, GPS_I2C_ADDR_WRITE, pdMS_TO_TICKS(100));
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "GPS probe failed: %s, recreating devices", esp_err_to_name(ret));
+        recreate_i2c_devices();
+        return ESP_ERR_NOT_FOUND;
+    }
+
     // Step 1: Send init command to write address (0x50)
     uint8_t init_cmd[] = {0x08, 0x00, 0x51, 0xAA, 0x04, 0x00, 0x00, 0x00};
     ret = i2c_master_transmit(i2c_dev_write, init_cmd, sizeof(init_cmd), pdMS_TO_TICKS(500));
     if (ret != ESP_OK) {
-        ESP_LOGD(TAG, "Init cmd failed: %s", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "Init cmd failed: %s, recreating devices", esp_err_to_name(ret));
+        recreate_i2c_devices();
         return ret;
     }
 
     // Allow GPS module time to process init command
-    vTaskDelay(pdMS_TO_TICKS(150));
+    vTaskDelay(pdMS_TO_TICKS(100));
 
     // Step 2: Read data length (4 bytes) from read address (0x54)
     ret = i2c_master_receive(i2c_dev_read, read_length, 4, pdMS_TO_TICKS(500));
     if (ret != ESP_OK) {
-        ESP_LOGI(TAG, "Read length failed: %s", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "Read length failed: %s, recreating devices", esp_err_to_name(ret));
+        recreate_i2c_devices();
         return ret;
     }
 
@@ -353,17 +413,19 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
 
     ret = i2c_master_transmit(i2c_dev_write, read_cmd, sizeof(read_cmd), pdMS_TO_TICKS(500));
     if (ret != ESP_OK) {
-        ESP_LOGD(TAG, "Failed to send read command: %s", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "Failed to send read command: %s, recreating devices", esp_err_to_name(ret));
+        recreate_i2c_devices();
         return ret;
     }
 
     // Allow GPS module time to prepare data
-    vTaskDelay(pdMS_TO_TICKS(150));
+    vTaskDelay(pdMS_TO_TICKS(100));
 
     // Step 4: Read NMEA data from read address (0x54)
     ret = i2c_master_receive(i2c_dev_read, (uint8_t *)buffer, data_len, pdMS_TO_TICKS(1000));
     if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to read NMEA data (%lu bytes): %s", data_len, esp_err_to_name(ret));
+        ESP_LOGW(TAG, "Failed to read NMEA data (%lu bytes): %s, recreating devices", data_len, esp_err_to_name(ret));
+        recreate_i2c_devices();
         return ret;
     }
 
@@ -423,57 +485,12 @@ static void gps_poll_task(void *pvParameters)
             // No data available, this is normal
             consecutive_errors = 0;
         } else {
-            // Error occurred
+            // Error occurred - recovery already handled in gps_i2c_read_nmea
             consecutive_errors++;
-            if (consecutive_errors >= 3) {
-                ESP_LOGW(TAG, "Multiple consecutive errors (%d), performing full I2C recovery...", consecutive_errors);
-
-                // Remove both device handles before bus reset
-                if (i2c_dev_read) {
-                    i2c_master_bus_rm_device(i2c_dev_read);
-                    i2c_dev_read = NULL;
-                }
-                if (i2c_dev_write) {
-                    i2c_master_bus_rm_device(i2c_dev_write);
-                    i2c_dev_write = NULL;
-                }
-
-                // Reset the I2C bus to clear any stuck state
-                vTaskDelay(pdMS_TO_TICKS(50));
-                i2c_master_bus_reset(i2c_bus_handle);
-                vTaskDelay(pdMS_TO_TICKS(200));
-
-                // Recreate write device handle first
-                i2c_device_config_t dev_cfg_write = {
-                    .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-                    .device_address = GPS_I2C_ADDR_WRITE,
-                    .scl_speed_hz = 100000,
-                };
-                esp_err_t add_ret = i2c_master_bus_add_device(i2c_bus_handle, &dev_cfg_write, &i2c_dev_write);
-                if (add_ret == ESP_OK) {
-                    ESP_LOGI(TAG, "Write device handle (0x%02X) recreated", GPS_I2C_ADDR_WRITE);
-                } else {
-                    ESP_LOGE(TAG, "Failed to recreate write device: %s", esp_err_to_name(add_ret));
-                }
-
-                vTaskDelay(pdMS_TO_TICKS(50));
-
-                // Recreate read device handle
-                i2c_device_config_t dev_cfg_read = {
-                    .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-                    .device_address = GPS_I2C_ADDR_READ,
-                    .scl_speed_hz = 100000,
-                };
-                add_ret = i2c_master_bus_add_device(i2c_bus_handle, &dev_cfg_read, &i2c_dev_read);
-                if (add_ret == ESP_OK) {
-                    ESP_LOGI(TAG, "Read device handle (0x%02X) recreated", GPS_I2C_ADDR_READ);
-                } else {
-                    ESP_LOGE(TAG, "Failed to recreate read device: %s", esp_err_to_name(add_ret));
-                }
-
+            if (consecutive_errors >= 5) {
+                ESP_LOGW(TAG, "Persistent GPS errors (%d), waiting longer...", consecutive_errors);
                 consecutive_errors = 0;
-                // Give GPS module time to stabilize after I2C reset
-                vTaskDelay(pdMS_TO_TICKS(1000));
+                vTaskDelay(pdMS_TO_TICKS(2000));  // Extra wait before retrying
             }
         }
 
