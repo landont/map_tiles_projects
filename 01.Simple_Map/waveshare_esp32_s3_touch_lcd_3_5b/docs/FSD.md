@@ -158,36 +158,27 @@ The system provides:
 
 #### FR-3.1.3 Zoom Level Control
 - **Description:** Change map zoom level between 10-19
-- **Input:** Slider value selection + Update button press
+- **Input:** Tap on zoom in (+) or zoom out (-) button
 - **Output:** Map reloads at new zoom level
 - **Behavior:**
-  - Slider shows current selection with asterisk (*) if not yet applied
-  - Update button applies the zoom change
+  - "+" button increases zoom by 1 level (max 19)
+  - "-" button decreases zoom by 1 level (min 10)
   - Map recenters on current GPS coordinates after zoom change
   - Loading popup displays during tile reload
+  - Buttons disabled during tile loading to prevent rapid zoom changes
 
 ### 3.2 Coordinate Functions
 
-#### FR-3.2.1 GPS Coordinate Display
-- **Description:** Show current map center coordinates
+#### FR-3.2.1 Internal GPS Tracking
+- **Description:** Track current map center coordinates internally
 - **Input:** Map scroll position
-- **Output:** Latitude and longitude in text fields
+- **Output:** Latitude and longitude available via API
 - **Behavior:**
-  - Format: 6 decimal places (e.g., 46.055030)
-  - Update during scroll events (throttled to 50ms)
-  - Editable via on-screen keyboard
+  - Coordinates updated during scroll events (throttled to 50ms)
+  - Available via `SimpleMap::get_current_location()` API
+  - Used for centering map after zoom changes
 
-#### FR-3.2.2 Manual Coordinate Entry
-- **Description:** Allow users to enter specific coordinates
-- **Input:** Text input via on-screen keyboard
-- **Output:** Map navigates to entered location
-- **Behavior:**
-  - Numeric keyboard appears when text field focused
-  - Validate latitude range: -90.0 to 90.0
-  - Validate longitude range: -180.0 to 180.0
-  - Apply changes via Update button
-
-#### FR-3.2.3 Coordinate Conversion
+#### FR-3.2.2 Coordinate Conversion
 - **Description:** Convert between GPS coordinates and tile coordinates
 - **Input:** Latitude, longitude, zoom level
 - **Output:** Tile X, Y coordinates
@@ -195,31 +186,49 @@ The system provides:
 
 ### 3.3 User Interface Functions
 
-#### FR-3.3.1 Input Panel
-- **Description:** Semi-transparent control panel overlay
-- **Components:**
-  - Latitude text field
-  - Longitude text field
-  - Zoom slider (range 10-19)
-  - Zoom label showing current value
-  - "Update Map" button
-- **Position:** Left side of screen, vertically centered
-- **Style:** Black background at 30% opacity, white border
+#### FR-3.3.1 Zoom In Button
+- **Description:** Circular button to increase zoom level by 1
+- **Position:** Lower left corner of screen (15px from edges)
+- **Size:** 50x50 pixels, circular (radius 25)
+- **Appearance:** Dark gray background (80% opacity), white border, white "+" symbol
+- **Behavior:**
+  - Increases zoom level by 1 when tapped
+  - Maximum zoom level: 19
+  - Disabled during tile loading operations
 
-#### FR-3.3.2 Loading Indicator
+#### FR-3.3.2 Zoom Out Button
+- **Description:** Circular button to decrease zoom level by 1
+- **Position:** Lower right corner of screen (15px from edges)
+- **Size:** 50x50 pixels, circular (radius 25)
+- **Appearance:** Dark gray background (80% opacity), white border, white "-" symbol
+- **Behavior:**
+  - Decreases zoom level by 1 when tapped
+  - Minimum zoom level: 10
+  - Disabled during tile loading operations
+
+#### FR-3.3.3 Battery Status Indicator
+- **Description:** Visual indicator showing battery level and charging status
+- **Position:** Upper right corner of screen (10px from edges)
+- **Size:** 70x30 pixels
+- **Components:**
+  - Battery icon (rectangle with fill level indicator)
+  - Battery tip (small nub on right side)
+  - Percentage label (e.g., "85%")
+- **Color Coding:**
+  - Green: Battery > 50%
+  - Orange: Battery 21-50%
+  - Red: Battery <= 20%
+  - Blue: Charging
+  - Gray: Unknown/No battery
+- **API:** `SimpleMap::update_battery_indicator(int percent, bool is_charging)`
+
+#### FR-3.3.4 Loading Indicator
 - **Description:** Visual feedback during tile loading
 - **Appearance:** Yellow pill-shaped popup with "Loading map..." text
 - **Behavior:**
   - Appears when tile loading begins
   - Disappears when all tiles loaded
   - Prevents multiple simultaneous load operations
-
-#### FR-3.3.3 On-Screen Keyboard
-- **Description:** Numeric keyboard for coordinate entry
-- **Type:** Number layout only
-- **Size:** Full width, half screen height
-- **Position:** Bottom of screen
-- **Behavior:** Auto-show on text field focus, auto-hide on defocus
 
 ---
 
@@ -357,6 +366,9 @@ public:
 
     // Get current zoom level
     static int get_current_zoom();
+
+    // Update battery indicator (0-100 percent, -1 for unknown/no battery)
+    static void update_battery_indicator(int percent, bool is_charging = false);
 
     // Set tile type (for multiple tile sets)
     static bool set_tile_type(int tile_type);
