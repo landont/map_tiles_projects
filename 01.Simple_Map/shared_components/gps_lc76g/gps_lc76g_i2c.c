@@ -421,14 +421,29 @@ static void gps_poll_task(void *pvParameters)
             // Error occurred
             consecutive_errors++;
             if (consecutive_errors >= 3) {
-                ESP_LOGW(TAG, "Multiple consecutive errors (%d), resetting I2C bus...", consecutive_errors);
+                ESP_LOGW(TAG, "Multiple consecutive errors (%d), resetting I2C and recreating read device...", consecutive_errors);
 
                 // Reset the I2C bus to clear any stuck state
-                esp_err_t reset_ret = i2c_master_bus_reset(i2c_bus_handle);
-                if (reset_ret == ESP_OK) {
-                    ESP_LOGI(TAG, "I2C bus reset successful");
+                i2c_master_bus_reset(i2c_bus_handle);
+
+                // Recreate the read device handle which is the one failing
+                if (i2c_dev_read) {
+                    i2c_master_bus_rm_device(i2c_dev_read);
+                    i2c_dev_read = NULL;
+                }
+
+                vTaskDelay(pdMS_TO_TICKS(100));
+
+                i2c_device_config_t dev_cfg_read = {
+                    .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+                    .device_address = GPS_I2C_ADDR_READ,
+                    .scl_speed_hz = 100000,
+                };
+                esp_err_t add_ret = i2c_master_bus_add_device(i2c_bus_handle, &dev_cfg_read, &i2c_dev_read);
+                if (add_ret == ESP_OK) {
+                    ESP_LOGI(TAG, "Read device handle recreated successfully");
                 } else {
-                    ESP_LOGW(TAG, "I2C bus reset failed: %s", esp_err_to_name(reset_ret));
+                    ESP_LOGE(TAG, "Failed to recreate read device: %s", esp_err_to_name(add_ret));
                 }
 
                 consecutive_errors = 0;
