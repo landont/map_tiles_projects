@@ -1,11 +1,13 @@
-# Detect which BSP component is available in the build
+# Detect which BSP component is available by checking if the component directory exists
 set(BSP_COMPONENT "")
 
-# Check for known BSP components
-idf_build_get_property(build_components BUILD_COMPONENTS)
-if("esp32_s3_touch_lcd_3_5b" IN_LIST build_components)
+# Get the project directory to search for components
+idf_build_get_property(project_dir PROJECT_DIR)
+
+# Check for known BSP components in the project's components directory
+if(EXISTS "${project_dir}/components/esp32_s3_touch_lcd_3_5b")
     set(BSP_COMPONENT "esp32_s3_touch_lcd_3_5b")
-elseif("esp32_s3_touch_amoled_1_75" IN_LIST build_components)
+elseif(EXISTS "${project_dir}/components/esp32_s3_touch_amoled_1_75")
     set(BSP_COMPONENT "esp32_s3_touch_amoled_1_75")
 endif()
 
@@ -17,7 +19,7 @@ if(BSP_COMPONENT)
         REQUIRES "0015__map_tiles" "lvgl" "${BSP_COMPONENT}"
     )
 else()
-    message(WARNING "simple_map: No supported BSP component found")
+    message(WARNING "simple_map: No supported BSP component found in ${project_dir}/components/")
     idf_component_register(
         SRCS "simple_map.cpp"
         INCLUDE_DIRS "."
