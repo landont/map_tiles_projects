@@ -64,8 +64,8 @@ extern "C" void app_main(void)
         return;
     }
 
-    // Show a location (example coordinates)
-    SimpleMap::show_location(37.77490, -122.41942, 16);
+    // Show a location (Acquaseria, Lake Como, Italy)
+    SimpleMap::show_location(46.05503, 9.25880, 16);
     SimpleMap::center_map_on_gps();
 
     bsp_display_unlock();
