@@ -6,6 +6,7 @@
 #include "lvgl.h"
 #include "bsp/esp-bsp.h"
 #include "simple_map.hpp"
+#include "battery_monitor.h"
 
 // Touch reset pin (GPIO 40)
 #define TOUCH_RST_PIN GPIO_NUM_40
@@ -69,4 +70,12 @@ extern "C" void app_main(void)
     SimpleMap::center_map_on_gps();
 
     bsp_display_unlock();
+
+    // Initialize and start battery monitor
+    i2c_master_bus_handle_t i2c_handle = bsp_i2c_get_handle();
+    if (battery_monitor_init(i2c_handle) == ESP_OK) {
+        battery_monitor_start(5000);  // Update every 5 seconds
+    } else {
+        printf("Battery monitor initialization failed (AXP2101 may not be present)\n");
+    }
 }
