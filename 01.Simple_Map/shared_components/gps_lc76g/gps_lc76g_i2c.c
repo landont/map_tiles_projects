@@ -298,22 +298,29 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
 
     *bytes_read = 0;
 
+    if (i2c_dev_write == NULL || i2c_dev_read == NULL) {
+        ESP_LOGE(TAG, "I2C device handles are NULL");
+        return ESP_ERR_INVALID_STATE;
+    }
+
     // Step 1: Send init command to get data length
     uint8_t init_cmd[] = {0x08, 0x00, 0x51, 0xAA, 0x04, 0x00, 0x00, 0x00};
     ret = i2c_master_transmit(i2c_dev_write, init_cmd, sizeof(init_cmd), pdMS_TO_TICKS(500));
     if (ret != ESP_OK) {
-        ESP_LOGD(TAG, "Failed to send init command: %s", esp_err_to_name(ret));
+        ESP_LOGI(TAG, "Init cmd failed: %s (this may be normal if GPS not ready)", esp_err_to_name(ret));
         return ret;
     }
+    ESP_LOGD(TAG, "Init cmd sent OK");
 
     vTaskDelay(pdMS_TO_TICKS(100));
 
     // Step 2: Read data length (4 bytes) from read address
     ret = i2c_master_receive(i2c_dev_read, read_length, 4, pdMS_TO_TICKS(500));
     if (ret != ESP_OK) {
-        ESP_LOGD(TAG, "Failed to read data length: %s", esp_err_to_name(ret));
+        ESP_LOGI(TAG, "Read length failed: %s", esp_err_to_name(ret));
         return ret;
     }
+    ESP_LOGD(TAG, "Read length: %02X %02X %02X %02X", read_length[0], read_length[1], read_length[2], read_length[3]);
 
     uint32_t data_len = read_length[0] | (read_length[1] << 8) | (read_length[2] << 16) | (read_length[3] << 24);
 
@@ -443,21 +450,14 @@ esp_err_t gps_i2c_init(i2c_master_bus_handle_t i2c_bus)
     }
     ESP_LOGI(TAG, "Added read device at 0x%02X", GPS_I2C_ADDR_READ);
 
-    // Probe write device to verify it exists
+    // Probe write device to verify GPS module exists
     ret = i2c_master_probe(i2c_bus, GPS_I2C_ADDR_WRITE, pdMS_TO_TICKS(100));
     if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "GPS write address (0x%02X) not responding: %s", GPS_I2C_ADDR_WRITE, esp_err_to_name(ret));
-    } else {
-        ESP_LOGI(TAG, "GPS write address (0x%02X) responding", GPS_I2C_ADDR_WRITE);
+        ESP_LOGE(TAG, "GPS module not found at address 0x%02X: %s", GPS_I2C_ADDR_WRITE, esp_err_to_name(ret));
+        return ESP_ERR_NOT_FOUND;
     }
-
-    // Probe read device
-    ret = i2c_master_probe(i2c_bus, GPS_I2C_ADDR_READ, pdMS_TO_TICKS(100));
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "GPS read address (0x%02X) not responding: %s", GPS_I2C_ADDR_READ, esp_err_to_name(ret));
-    } else {
-        ESP_LOGI(TAG, "GPS read address (0x%02X) responding", GPS_I2C_ADDR_READ);
-    }
+    ESP_LOGI(TAG, "GPS module found at address 0x%02X", GPS_I2C_ADDR_WRITE);
+    // Note: Read address 0x54 only responds after a command is sent to 0x50
 
     memset(&current_gps_data, 0, sizeof(current_gps_data));
 
