@@ -169,45 +169,34 @@ void SimpleMap::create_zoom_buttons(lv_obj_t* parent_screen) {
 }
 
 void SimpleMap::create_battery_indicator(lv_obj_t* parent_screen) {
-    // Create battery container - upper right
+    // Create battery container - upper right (simplified: just percentage text)
     battery_container = lv_obj_create(parent_screen);
-    lv_obj_set_size(battery_container, 70, 30);
-    lv_obj_align(battery_container, LV_ALIGN_TOP_RIGHT, -10, 10);
-    lv_obj_set_style_bg_color(battery_container, lv_color_make(30, 30, 30), 0);
-    lv_obj_set_style_bg_opa(battery_container, LV_OPA_70, 0);
+    lv_obj_set_size(battery_container, 55, 24);
+    lv_obj_align(battery_container, LV_ALIGN_TOP_RIGHT, -5, 5);
+    lv_obj_set_style_bg_color(battery_container, lv_color_make(0, 0, 0), 0);
+    lv_obj_set_style_bg_opa(battery_container, LV_OPA_60, 0);
     lv_obj_set_style_border_width(battery_container, 1, 0);
     lv_obj_set_style_border_color(battery_container, lv_color_white(), 0);
-    lv_obj_set_style_radius(battery_container, 5, 0);
-    lv_obj_set_style_pad_all(battery_container, 4, 0);
+    lv_obj_set_style_radius(battery_container, 4, 0);
+    lv_obj_set_style_pad_all(battery_container, 2, 0);
     lv_obj_clear_flag(battery_container, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Create battery icon (simple rectangle representation)
+    // Battery icon is now just a colored bar on the left
     battery_icon = lv_obj_create(battery_container);
-    lv_obj_set_size(battery_icon, 30, 16);
+    lv_obj_set_size(battery_icon, 6, 16);
     lv_obj_align(battery_icon, LV_ALIGN_LEFT_MID, 0, 0);
-    lv_obj_set_style_bg_color(battery_icon, lv_color_make(0, 200, 0), 0);  // Green for full
+    lv_obj_set_style_bg_color(battery_icon, lv_color_make(0, 200, 0), 0);  // Green
     lv_obj_set_style_bg_opa(battery_icon, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_color(battery_icon, lv_color_white(), 0);
-    lv_obj_set_style_border_width(battery_icon, 1, 0);
+    lv_obj_set_style_border_width(battery_icon, 0, 0);
     lv_obj_set_style_radius(battery_icon, 2, 0);
     lv_obj_clear_flag(battery_icon, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Battery tip (the small nub on the right)
-    lv_obj_t* battery_tip = lv_obj_create(battery_container);
-    lv_obj_set_size(battery_tip, 3, 8);
-    lv_obj_align_to(battery_tip, battery_icon, LV_ALIGN_OUT_RIGHT_MID, 1, 0);
-    lv_obj_set_style_bg_color(battery_tip, lv_color_white(), 0);
-    lv_obj_set_style_bg_opa(battery_tip, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(battery_tip, 0, 0);
-    lv_obj_set_style_radius(battery_tip, 1, 0);
-    lv_obj_clear_flag(battery_tip, LV_OBJ_FLAG_SCROLLABLE);
-
-    // Create battery percentage label
+    // Create battery percentage label - centered
     battery_label = lv_label_create(battery_container);
-    lv_label_set_text(battery_label, "-%");
+    lv_label_set_text(battery_label, "--%");
     lv_obj_set_style_text_color(battery_label, lv_color_white(), 0);
     lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(battery_label, LV_ALIGN_RIGHT_MID, 0, 0);
+    lv_obj_align(battery_label, LV_ALIGN_RIGHT_MID, -2, 0);
 }
 
 void SimpleMap::update_battery_indicator(int percent, bool is_charging) {
@@ -221,17 +210,21 @@ void SimpleMap::update_battery_indicator(int percent, bool is_charging) {
 
     // Update label
     if (percent < 0) {
-        lv_label_set_text(battery_label, "-%");
-        printf("SimpleMap: Battery label set to '-%%' (unknown)\n");
+        lv_label_set_text(battery_label, "--%");
+        printf("SimpleMap: Battery label set to '--%%' (unknown)\n");
     } else {
         lv_label_set_text_fmt(battery_label, "%d%%", percent);
         printf("SimpleMap: Battery label set to '%d%%'\n", percent);
     }
 
-    // Update icon color based on level
+    // Update status bar color based on level and charging state
     lv_color_t color;
     const char* color_name;
-    if (percent < 0) {
+
+    if (is_charging) {
+        color = lv_color_make(0, 150, 255);    // Blue for charging
+        color_name = "blue (charging)";
+    } else if (percent < 0) {
         color = lv_color_make(128, 128, 128);  // Gray for unknown
         color_name = "gray (unknown)";
     } else if (percent <= 20) {
@@ -245,21 +238,8 @@ void SimpleMap::update_battery_indicator(int percent, bool is_charging) {
         color_name = "green (good)";
     }
 
-    if (is_charging) {
-        color = lv_color_make(0, 150, 255);    // Blue for charging
-        color_name = "blue (charging)";
-    }
-
     printf("SimpleMap: Battery color set to %s\n", color_name);
     lv_obj_set_style_bg_color(battery_icon, color, 0);
-
-    // Update icon width based on percentage (visual fill level)
-    if (percent >= 0) {
-        int fill_width = (percent * 28) / 100;  // Max width 28 pixels
-        if (fill_width < 4) fill_width = 4;     // Minimum visible width
-        lv_obj_set_width(battery_icon, fill_width);
-        printf("SimpleMap: Battery icon width set to %d pixels\n", fill_width);
-    }
 
     // Force UI update
     lv_obj_invalidate(battery_icon);

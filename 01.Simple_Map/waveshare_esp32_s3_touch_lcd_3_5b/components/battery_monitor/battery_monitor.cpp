@@ -66,11 +66,19 @@ static void battery_monitor_task(void *pvParameters)
 
             if (power.isBatteryConnect()) {
                 percent = power.getBatteryPercent();
-                charging = power.isCharging();
-
                 uint16_t voltage = power.getBattVoltage();
-                ESP_LOGI(TAG, "Battery: %d%%, %umV, %s",
-                         percent, voltage, charging ? "charging" : "discharging");
+
+                // Check charging status - isVbusIn indicates external power connected
+                bool vbus_in = power.isVbusIn();
+                bool is_charging_state = power.isCharging();
+                bool is_discharging = power.isDischarge();
+
+                // Use isVbusIn as primary indicator - if USB power connected, we're charging
+                charging = vbus_in;
+
+                ESP_LOGI(TAG, "Battery: %d%%, %umV, vbus=%d, charging=%d, discharging=%d -> %s",
+                         percent, voltage, vbus_in, is_charging_state, is_discharging,
+                         charging ? "CHARGING" : "ON BATTERY");
             } else {
                 ESP_LOGD(TAG, "No battery connected");
             }
