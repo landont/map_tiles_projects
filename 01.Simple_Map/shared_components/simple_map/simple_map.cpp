@@ -150,8 +150,9 @@ void SimpleMap::show_location(double latitude, double longitude, int zoom_level)
     }
     if (zoom_slider) {
         lv_slider_set_value(zoom_slider, zoom_level, LV_ANIM_OFF);
+        lv_obj_invalidate(zoom_slider);  // Force redraw
     }
-    
+
     // Update zoom label
     update_zoom_label();
     
