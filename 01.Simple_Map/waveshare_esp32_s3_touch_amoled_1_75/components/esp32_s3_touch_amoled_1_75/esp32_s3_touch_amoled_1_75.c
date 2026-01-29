@@ -571,18 +571,20 @@ esp_io_expander_handle_t bsp_io_expander_init(void)
     return io_expander;
 }
 
-static lv_display_t *bsp_display_lcd_init()
+static lv_display_t *bsp_display_lcd_init(const bsp_display_cfg_t *cfg)
 {
     bsp_display_config_t disp_config = {0};
 
     BSP_ERROR_CHECK_RETURN_NULL(bsp_display_new(&disp_config, &panel_handle, &io_handle));
 
-    int buffer_size = 0;
+    int buffer_size = cfg->buffer_size;
+    if (buffer_size == 0) {
 #if CONFIG_BSP_DISPLAY_LVGL_AVOID_TEAR
-    buffer_size = BSP_LCD_H_RES * BSP_LCD_V_RES;
+        buffer_size = BSP_LCD_H_RES * BSP_LCD_V_RES;
 #else
-    buffer_size = BSP_LCD_H_RES * LVGL_BUFFER_HEIGHT;
+        buffer_size = BSP_LCD_H_RES * LVGL_BUFFER_HEIGHT;
 #endif /* CONFIG_BSP_DISPLAY_LVGL_AVOID_TEAR */
+    }
 
     const lvgl_port_display_cfg_t disp_cfg = {
         .io_handle = io_handle,
@@ -602,9 +604,9 @@ static lv_display_t *bsp_display_lcd_init()
         },
         .flags = {
             .sw_rotate = true,
-            .buff_dma = false,
+            .buff_dma = cfg->flags.buff_dma,
 #if CONFIG_BSP_DISPLAY_LVGL_PSRAM
-            .buff_spiram = false,
+            .buff_spiram = cfg->flags.buff_spiram,
 #endif
 #if CONFIG_BSP_DISPLAY_LVGL_FULL_REFRESH
             .full_refresh = 1,
