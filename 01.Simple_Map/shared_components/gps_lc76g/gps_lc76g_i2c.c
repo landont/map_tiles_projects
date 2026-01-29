@@ -339,11 +339,13 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
 
     if (data_len == 0) {
         // No data available yet
+        if (i2c_mutex) xSemaphoreGive(i2c_mutex);
         return ESP_OK;
     }
 
     if (data_len > 2000) {
         ESP_LOGW(TAG, "Invalid data length: %lu (too large)", data_len);
+        if (i2c_mutex) xSemaphoreGive(i2c_mutex);
         return ESP_OK;
     }
 
