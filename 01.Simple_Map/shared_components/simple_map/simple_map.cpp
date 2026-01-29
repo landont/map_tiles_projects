@@ -128,8 +128,8 @@ void SimpleMap::create_tile_widgets() {
             lv_obj_set_pos(tile_widgets[i], col * MAP_TILES_TILE_SIZE, row * MAP_TILES_TILE_SIZE);
             lv_obj_set_size(tile_widgets[i], MAP_TILES_TILE_SIZE, MAP_TILES_TILE_SIZE);
 
-            // Set default background while tiles load
-            lv_obj_set_style_bg_color(tile_widgets[i], lv_color_make(200, 200, 200), 0);
+            // Set default background while tiles load (black for missing tiles)
+            lv_obj_set_style_bg_color(tile_widgets[i], lv_color_black(), 0);
             lv_obj_set_style_bg_opa(tile_widgets[i], LV_OPA_COVER, 0);
         }
     }
@@ -404,6 +404,11 @@ void SimpleMap::load_map_tiles() {
                         // Only clear background if we have valid image
                         lv_obj_set_style_bg_opa(tile_widgets[index], LV_OPA_TRANSP, 0);
                     }
+                } else {
+                    // Missing tile - show solid black
+                    lv_image_set_src(tile_widgets[index], NULL);
+                    lv_obj_set_style_bg_color(tile_widgets[index], lv_color_black(), 0);
+                    lv_obj_set_style_bg_opa(tile_widgets[index], LV_OPA_COVER, 0);
                 }
             }
         }
