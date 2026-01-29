@@ -357,14 +357,16 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
     vTaskDelay(pdMS_TO_TICKS(100));
 
     // Step 4: Read NMEA data from read address (0x54)
-    ret = i2c_master_receive(i2c_dev_read, (uint8_t *)buffer, data_len, pdMS_TO_TICKS(500));
+    ret = i2c_master_receive(i2c_dev_read, (uint8_t *)buffer, data_len, pdMS_TO_TICKS(1000));
     if (ret != ESP_OK) {
-        ESP_LOGD(TAG, "Failed to read NMEA data: %s", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "Failed to read NMEA data (%lu bytes): %s", data_len, esp_err_to_name(ret));
         return ret;
     }
 
     buffer[data_len] = '\0';
     *bytes_read = data_len;
+
+    ESP_LOGI(TAG, "Successfully read %lu bytes of NMEA data", data_len);
 
     return ESP_OK;
 }
@@ -386,16 +388,28 @@ static void gps_poll_task(void *pvParameters)
         esp_err_t ret = gps_i2c_read_nmea(nmea_buffer, 2047, &bytes_read);
 
         if (ret == ESP_OK && bytes_read > 0) {
-            ESP_LOGD(TAG, "Read %d bytes from GPS", bytes_read);
+            // Log first 60 chars of data for debugging
+            char preview[61];
+            size_t preview_len = bytes_read < 60 ? bytes_read : 60;
+            memcpy(preview, nmea_buffer, preview_len);
+            preview[preview_len] = '\0';
+            // Replace newlines with spaces for readable log
+            for (size_t i = 0; i < preview_len; i++) {
+                if (preview[i] == '\r' || preview[i] == '\n') preview[i] = ' ';
+            }
+            ESP_LOGI(TAG, "NMEA preview: %s...", preview);
 
             // Parse NMEA sentences (separated by newlines)
+            int sentence_count = 0;
             char *line = strtok(nmea_buffer, "\r\n");
             while (line != NULL) {
                 if (line[0] == '$') {
                     parse_nmea_sentence(line);
+                    sentence_count++;
                 }
                 line = strtok(NULL, "\r\n");
             }
+            ESP_LOGI(TAG, "Parsed %d NMEA sentences", sentence_count);
         }
 
         vTaskDelay(pdMS_TO_TICKS(poll_interval));
