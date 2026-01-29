@@ -315,15 +315,21 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
     // Step 2: Read data length (4 bytes) - use same device, just receive
     ret = i2c_master_receive(i2c_dev, read_length, 4, pdMS_TO_TICKS(500));
     if (ret != ESP_OK) {
-        ESP_LOGD(TAG, "Read length failed: %s", esp_err_to_name(ret));
+        ESP_LOGI(TAG, "Read length failed: %s", esp_err_to_name(ret));
         return ret;
     }
-    ESP_LOGD(TAG, "Read length: %02X %02X %02X %02X", read_length[0], read_length[1], read_length[2], read_length[3]);
 
     uint32_t data_len = read_length[0] | (read_length[1] << 8) | (read_length[2] << 16) | (read_length[3] << 24);
+    ESP_LOGI(TAG, "Read length bytes: %02X %02X %02X %02X = %lu",
+             read_length[0], read_length[1], read_length[2], read_length[3], data_len);
 
-    if (data_len == 0 || data_len > 2000) {
-        // No data or invalid length
+    if (data_len == 0) {
+        // No data available yet
+        return ESP_OK;
+    }
+
+    if (data_len > 2000) {
+        ESP_LOGW(TAG, "Invalid data length: %lu (too large)", data_len);
         return ESP_OK;
     }
 
