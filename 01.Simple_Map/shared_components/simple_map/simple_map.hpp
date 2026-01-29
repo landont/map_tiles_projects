@@ -44,6 +44,9 @@ public:
     // Update battery indicator (0-100 percent, -1 for unknown/no battery)
     static void update_battery_indicator(int percent, bool is_charging = false);
 
+    // Get last touch time (milliseconds since boot)
+    static uint32_t get_last_touch_time();
+
     // Cleanup
     static void cleanup();
 
@@ -65,6 +68,7 @@ private:
     static bool is_loading;  // Flag to prevent multiple simultaneous loads
     static uint32_t last_scroll_time;  // Timestamp of last scroll event
     static uint32_t last_gps_update_time;  // Timestamp of last GPS update
+    static uint32_t last_touch_time;  // Timestamp of last touch event
     static map_tiles_handle_t map_handle;
 
     // Helper functions
@@ -79,4 +83,5 @@ private:
     static void hide_loading_popup();
     static void update_current_gps_from_map_center();
     static void update_zoom_buttons_visibility();
+    static void touch_event_cb(lv_event_t *e);
 };

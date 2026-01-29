@@ -3,6 +3,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_timer.h"
+#include "bsp/esp32_s3_touch_lcd_3_5b.h"
 
 // Static member definitions
 lv_obj_t* SimpleMap::map_container = nullptr;
@@ -24,6 +25,7 @@ bool SimpleMap::initialized = false;
 bool SimpleMap::is_loading = false;
 uint32_t SimpleMap::last_scroll_time = 0;
 uint32_t SimpleMap::last_gps_update_time = 0;
+uint32_t SimpleMap::last_touch_time = 0;
 map_tiles_handle_t SimpleMap::map_handle = nullptr;
 
 bool SimpleMap::init(lv_obj_t* parent_screen) {
@@ -87,6 +89,10 @@ bool SimpleMap::init(lv_obj_t* parent_screen) {
     // Call update_battery_indicator() from your app with real values from AXP2101 PMIC
     update_battery_indicator(-1, false);  // -1 = unknown/no battery connected
     printf("SimpleMap: Battery indicator initialized (call update_battery_indicator() with real values)\n");
+
+    // Register touch event callback on parent screen to track activity for backlight dimming
+    lv_obj_add_event_cb(parent_screen, touch_event_cb, LV_EVENT_PRESSED, NULL);
+    last_touch_time = esp_timer_get_time() / 1000;  // Initialize to current time
 
     initialized = true;
     return true;
@@ -292,6 +298,18 @@ void SimpleMap::update_zoom_buttons_visibility() {
     } else {
         lv_obj_clear_flag(zoom_out_btn, LV_OBJ_FLAG_HIDDEN);
     }
+}
+
+void SimpleMap::touch_event_cb(lv_event_t *e) {
+    // Update last touch time
+    last_touch_time = esp_timer_get_time() / 1000;
+
+    // Set backlight to 100% on touch
+    bsp_display_brightness_set(100);
+}
+
+uint32_t SimpleMap::get_last_touch_time() {
+    return last_touch_time;
 }
 
 void SimpleMap::show_location(double latitude, double longitude, int zoom_level) {

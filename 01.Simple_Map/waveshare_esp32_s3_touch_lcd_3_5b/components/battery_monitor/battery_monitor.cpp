@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <cstring>
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/i2c_master.h"
@@ -22,6 +23,8 @@ static i2c_master_dev_handle_t i2c_device = nullptr;
 static TaskHandle_t monitor_task_handle = nullptr;
 static uint32_t update_interval = 5000;
 static bool initialized = false;
+static bool backlight_dimmed = false;
+static const uint32_t BACKLIGHT_DIM_TIMEOUT_MS = 15000;  // 15 seconds
 
 // I2C read/write callbacks for XPowersLib
 static int pmu_register_read(uint8_t devAddr, uint8_t regAddr, uint8_t *data, uint8_t len)
@@ -90,6 +93,22 @@ static void battery_monitor_task(void *pvParameters)
                 bsp_display_unlock();
             } else {
                 ESP_LOGW(TAG, "Failed to acquire LVGL mutex for battery update");
+            }
+
+            // Check for backlight dimming based on touch inactivity
+            uint32_t current_time = esp_timer_get_time() / 1000;
+            uint32_t last_touch = SimpleMap::get_last_touch_time();
+            uint32_t idle_time = current_time - last_touch;
+
+            if (idle_time >= BACKLIGHT_DIM_TIMEOUT_MS && !backlight_dimmed) {
+                // Dim backlight to 75% after 15 seconds of inactivity
+                bsp_display_brightness_set(75);
+                backlight_dimmed = true;
+                ESP_LOGI(TAG, "Backlight dimmed to 75%% (idle for %lu ms)", idle_time);
+            } else if (idle_time < BACKLIGHT_DIM_TIMEOUT_MS && backlight_dimmed) {
+                // Touch event restored brightness, reset flag
+                backlight_dimmed = false;
+                ESP_LOGI(TAG, "Backlight restored to 100%%");
             }
         }
 
