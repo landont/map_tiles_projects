@@ -79,7 +79,7 @@ extern "C" void app_main(void)
     gpio_set_level(TOUCH_RST_PIN, 1);
     vTaskDelay(pdMS_TO_TICKS(200));  // Allow touch controller to initialize
 
-    lv_disp_t *disp = bsp_display_start();
+    bsp_display_start();
     bsp_display_backlight_on();
 
     bsp_display_lock(0);
