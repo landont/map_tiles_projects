@@ -17,9 +17,16 @@
 #define GPS_TX_PIN    17
 #define GPS_RX_PIN    18
 
+static const char *TAG = "GPS";
+
 // GPS data callback - updates the map with GPS position
 static void gps_callback(const gps_data_t *data, void *user_data) {
     if (data->valid) {
+        // Log GPS data
+        ESP_LOGI(TAG, "Fix: %.6f, %.6f | Alt: %.1fm | Speed: %.1f km/h | Sats: %d | HDOP: %.1f",
+                 data->latitude, data->longitude, data->altitude,
+                 data->speed_kmh, data->satellites_used, data->hdop);
+
         // Update map with GPS position
         if (bsp_display_lock(100)) {
             SimpleMap::set_gps_position(data->latitude, data->longitude, true);
@@ -27,6 +34,9 @@ static void gps_callback(const gps_data_t *data, void *user_data) {
             bsp_display_unlock();
         }
     } else {
+        // Log acquiring status
+        ESP_LOGD(TAG, "Acquiring fix... Satellites visible: %d", data->satellites_visible);
+
         // No valid fix
         if (bsp_display_lock(100)) {
             SimpleMap::set_gps_position(0, 0, false);
