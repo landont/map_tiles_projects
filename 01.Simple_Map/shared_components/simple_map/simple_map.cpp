@@ -141,7 +141,7 @@ void SimpleMap::create_zoom_buttons(lv_obj_t* parent_screen) {
 
     lv_obj_t* plus_label = lv_label_create(zoom_in_btn);
     lv_label_set_text(plus_label, "+");
-    lv_obj_set_style_text_font(plus_label, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(plus_label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(plus_label, lv_color_white(), 0);
     lv_obj_center(plus_label);
 
@@ -158,7 +158,7 @@ void SimpleMap::create_zoom_buttons(lv_obj_t* parent_screen) {
 
     lv_obj_t* minus_label = lv_label_create(zoom_out_btn);
     lv_label_set_text(minus_label, "-");
-    lv_obj_set_style_text_font(minus_label, &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_font(minus_label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(minus_label, lv_color_white(), 0);
     lv_obj_center(minus_label);
 }
@@ -201,7 +201,7 @@ void SimpleMap::create_battery_indicator(lv_obj_t* parent_screen) {
     battery_label = lv_label_create(battery_container);
     lv_label_set_text(battery_label, "-%");
     lv_obj_set_style_text_color(battery_label, lv_color_white(), 0);
-    lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_14, 0);
     lv_obj_align(battery_label, LV_ALIGN_RIGHT_MID, 0, 0);
 }
 
