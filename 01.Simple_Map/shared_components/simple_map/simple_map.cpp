@@ -3,7 +3,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_timer.h"
-#include "bsp/esp32_s3_touch_lcd_3_5b.h"
+#include "bsp/esp-bsp.h"
 
 // Static member definitions
 lv_obj_t* SimpleMap::map_container = nullptr;
