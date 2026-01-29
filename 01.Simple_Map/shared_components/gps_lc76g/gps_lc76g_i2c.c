@@ -473,7 +473,7 @@ static void gps_poll_task(void *pvParameters)
                 i2c_device_config_t dev_cfg_write = {
                     .dev_addr_length = I2C_ADDR_BIT_LEN_7,
                     .device_address = GPS_I2C_ADDR_WRITE,
-                    .scl_speed_hz = 100000,
+                    .scl_speed_hz = 50000,
                 };
                 esp_err_t add_ret = i2c_master_bus_add_device(i2c_bus_handle, &dev_cfg_write, &i2c_dev_write);
                 if (add_ret == ESP_OK) {
@@ -488,7 +488,7 @@ static void gps_poll_task(void *pvParameters)
                 i2c_device_config_t dev_cfg_read = {
                     .dev_addr_length = I2C_ADDR_BIT_LEN_7,
                     .device_address = GPS_I2C_ADDR_READ,
-                    .scl_speed_hz = 100000,
+                    .scl_speed_hz = 50000,
                 };
                 add_ret = i2c_master_bus_add_device(i2c_bus_handle, &dev_cfg_read, &i2c_dev_read);
                 if (add_ret == ESP_OK) {
@@ -543,7 +543,7 @@ esp_err_t gps_i2c_init(i2c_master_bus_handle_t i2c_bus)
     i2c_device_config_t dev_cfg_write = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = GPS_I2C_ADDR_WRITE,
-        .scl_speed_hz = 100000,
+        .scl_speed_hz = 50000,
     };
 
     esp_err_t ret = i2c_master_bus_add_device(i2c_bus, &dev_cfg_write, &i2c_dev_write);
@@ -557,7 +557,7 @@ esp_err_t gps_i2c_init(i2c_master_bus_handle_t i2c_bus)
     i2c_device_config_t dev_cfg_read = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = GPS_I2C_ADDR_READ,
-        .scl_speed_hz = 100000,
+        .scl_speed_hz = 50000,
     };
 
     ret = i2c_master_bus_add_device(i2c_bus, &dev_cfg_read, &i2c_dev_read);
