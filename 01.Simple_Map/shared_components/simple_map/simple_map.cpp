@@ -63,13 +63,9 @@ bool SimpleMap::init(lv_obj_t* parent_screen) {
 
     printf("SimpleMap: Initialized with grid size %dx%d (%d tiles)\n", grid_cols, grid_rows, tile_count);
 
-    lv_display_t *disp = lv_display_get_default();
-    lv_coord_t _width = lv_display_get_horizontal_resolution(disp);
-    lv_coord_t _height = lv_display_get_vertical_resolution(disp);
-
     // Create scrollable map container (like map_scroll in map_display.cpp)
     map_container = lv_obj_create(parent_screen);
-    lv_obj_set_size(map_container, _width, _height);  // Match device resolution
+    lv_obj_set_size(map_container, disp_width, disp_height);  // Match device resolution
     lv_obj_center(map_container);
     lv_obj_clear_flag(map_container, LV_OBJ_FLAG_SCROLL_MOMENTUM);
     lv_obj_set_scroll_dir(map_container, LV_DIR_ALL);
