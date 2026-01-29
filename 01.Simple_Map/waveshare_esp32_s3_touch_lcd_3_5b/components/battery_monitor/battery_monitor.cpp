@@ -171,7 +171,7 @@ esp_err_t battery_monitor_start(uint32_t update_interval_ms)
     BaseType_t result = xTaskCreate(
         battery_monitor_task,
         "battery_mon",
-        4096,
+        8192,
         nullptr,
         5,  // Priority
         &monitor_task_handle
