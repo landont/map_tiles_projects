@@ -101,10 +101,10 @@ static void battery_monitor_task(void *pvParameters)
             uint32_t idle_time = current_time - last_touch;
 
             if (idle_time >= BACKLIGHT_DIM_TIMEOUT_MS && !backlight_dimmed) {
-                // Dim backlight to 50% after 15 seconds of inactivity
-                bsp_display_brightness_set(50);
+                // Dim backlight to 25% after 15 seconds of inactivity
+                bsp_display_brightness_set(25);
                 backlight_dimmed = true;
-                ESP_LOGI(TAG, "Backlight dimmed to 50%% (idle for %lu ms)", idle_time);
+                ESP_LOGI(TAG, "Backlight dimmed to 25%% (idle for %lu ms)", idle_time);
             } else if (idle_time < BACKLIGHT_DIM_TIMEOUT_MS && backlight_dimmed) {
                 // Touch event restored brightness, reset flag
                 backlight_dimmed = false;
@@ -160,6 +160,13 @@ esp_err_t battery_monitor_init(i2c_master_bus_handle_t i2c_bus_handle)
     power.setChargerConstantCurr(XPOWERS_AXP2101_CHG_CUR_200MA);
     power.setChargerTerminationCurr(XPOWERS_AXP2101_CHG_ITERM_25MA);
     power.setChargeTargetVoltage(XPOWERS_AXP2101_CHG_VOL_4V1);
+
+    // Configure power button timing
+    // Power on: 1 second press (XPOWERS_POWERON_1S)
+    // Power off: 4 second press (closest to 5s, options are 4/6/8/10s)
+    power.setPowerKeyPressOnTime(XPOWERS_POWERON_1S);
+    power.setPowerKeyPressOffTime(XPOWERS_POWEROFF_4S);
+    ESP_LOGI(TAG, "Power button configured: 1s to power on, 4s to power off");
 
     // Log initial status
     if (power.isBatteryConnect()) {
