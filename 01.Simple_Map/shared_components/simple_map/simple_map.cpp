@@ -241,9 +241,9 @@ void SimpleMap::update_battery_indicator(int percent, bool is_charging) {
     printf("SimpleMap: Battery color set to %s\n", color_name);
     lv_obj_set_style_bg_color(battery_icon, color, 0);
 
-    // Force UI update
-    lv_obj_invalidate(battery_icon);
-    lv_obj_invalidate(battery_label);
+    // Force UI update - invalidate container and trigger immediate refresh
+    lv_obj_invalidate(battery_container);
+    lv_refr_now(NULL);  // Force immediate screen refresh
     printf("SimpleMap: Battery indicator updated successfully\n");
 }
 
