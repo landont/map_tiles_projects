@@ -445,17 +445,61 @@ static void gps_poll_task(void *pvParameters)
             ESP_LOGI(TAG, "GPS read error %d: %s", consecutive_errors, esp_err_to_name(ret));
 
             if (consecutive_errors >= 5) {
-                ESP_LOGW(TAG, "Persistent GPS errors, resetting I2C bus...");
+                ESP_LOGW(TAG, "Persistent GPS errors, recreating device handles...");
 
-                // Take mutex before bus reset
+                // Take mutex before recovery
                 if (i2c_mutex) xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(1000));
 
+                // Remove old device handles
+                if (i2c_dev_read) {
+                    i2c_master_bus_rm_device(i2c_dev_read);
+                    i2c_dev_read = NULL;
+                }
+                if (i2c_dev_write) {
+                    i2c_master_bus_rm_device(i2c_dev_write);
+                    i2c_dev_write = NULL;
+                }
+
+                vTaskDelay(pdMS_TO_TICKS(100));
+
+                // Reset bus
                 i2c_master_bus_reset(i2c_bus_handle);
-                vTaskDelay(pdMS_TO_TICKS(500));
+                vTaskDelay(pdMS_TO_TICKS(200));
+
+                // Recreate write device
+                i2c_device_config_t dev_cfg_write = {
+                    .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+                    .device_address = GPS_I2C_ADDR_WRITE,
+                    .scl_speed_hz = 100000,
+                };
+                esp_err_t add_ret = i2c_master_bus_add_device(i2c_bus_handle, &dev_cfg_write, &i2c_dev_write);
+                if (add_ret == ESP_OK) {
+                    ESP_LOGI(TAG, "Write device (0x%02X) recreated", GPS_I2C_ADDR_WRITE);
+                } else {
+                    ESP_LOGE(TAG, "Failed to recreate write device: %s", esp_err_to_name(add_ret));
+                }
+
+                vTaskDelay(pdMS_TO_TICKS(100));
+
+                // Recreate read device
+                i2c_device_config_t dev_cfg_read = {
+                    .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+                    .device_address = GPS_I2C_ADDR_READ,
+                    .scl_speed_hz = 100000,
+                };
+                add_ret = i2c_master_bus_add_device(i2c_bus_handle, &dev_cfg_read, &i2c_dev_read);
+                if (add_ret == ESP_OK) {
+                    ESP_LOGI(TAG, "Read device (0x%02X) recreated", GPS_I2C_ADDR_READ);
+                } else {
+                    ESP_LOGE(TAG, "Failed to recreate read device: %s", esp_err_to_name(add_ret));
+                }
+
+                vTaskDelay(pdMS_TO_TICKS(200));
 
                 if (i2c_mutex) xSemaphoreGive(i2c_mutex);
 
                 consecutive_errors = 0;
+                ESP_LOGI(TAG, "GPS recovery complete");
             }
         }
 
