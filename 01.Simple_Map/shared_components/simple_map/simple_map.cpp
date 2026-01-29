@@ -257,6 +257,8 @@ void SimpleMap::update_battery_indicator(int percent, bool is_charging) {
 }
 
 void SimpleMap::zoom_in_event_cb(lv_event_t *e) {
+    reset_activity_timer();  // Reset backlight timer on button press
+
     if (is_loading) return;
 
     int new_zoom = current_zoom + 1;
@@ -270,6 +272,8 @@ void SimpleMap::zoom_in_event_cb(lv_event_t *e) {
 }
 
 void SimpleMap::zoom_out_event_cb(lv_event_t *e) {
+    reset_activity_timer();  // Reset backlight timer on button press
+
     if (is_loading) return;
 
     int new_zoom = current_zoom - 1;
@@ -301,15 +305,19 @@ void SimpleMap::update_zoom_buttons_visibility() {
 }
 
 void SimpleMap::touch_event_cb(lv_event_t *e) {
-    // Update last touch time
-    last_touch_time = esp_timer_get_time() / 1000;
-
-    // Set backlight to 100% on touch
-    bsp_display_brightness_set(100);
+    reset_activity_timer();
 }
 
 uint32_t SimpleMap::get_last_touch_time() {
     return last_touch_time;
+}
+
+void SimpleMap::reset_activity_timer() {
+    // Update last touch time
+    last_touch_time = esp_timer_get_time() / 1000;
+
+    // Set backlight to 100% on activity
+    bsp_display_brightness_set(100);
 }
 
 void SimpleMap::show_location(double latitude, double longitude, int zoom_level) {
@@ -450,6 +458,8 @@ void SimpleMap::load_map_tiles() {
 void SimpleMap::map_scroll_event_cb(lv_event_t *e)
 {
     if (!initialized || !map_handle) return;
+
+    reset_activity_timer();  // Reset backlight timer on scroll
 
     lv_event_code_t event_code = lv_event_get_code(e);
 

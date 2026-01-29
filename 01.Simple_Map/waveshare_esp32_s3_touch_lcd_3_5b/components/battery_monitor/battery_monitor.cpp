@@ -101,10 +101,10 @@ static void battery_monitor_task(void *pvParameters)
             uint32_t idle_time = current_time - last_touch;
 
             if (idle_time >= BACKLIGHT_DIM_TIMEOUT_MS && !backlight_dimmed) {
-                // Dim backlight to 75% after 15 seconds of inactivity
-                bsp_display_brightness_set(75);
+                // Dim backlight to 50% after 15 seconds of inactivity
+                bsp_display_brightness_set(50);
                 backlight_dimmed = true;
-                ESP_LOGI(TAG, "Backlight dimmed to 75%% (idle for %lu ms)", idle_time);
+                ESP_LOGI(TAG, "Backlight dimmed to 50%% (idle for %lu ms)", idle_time);
             } else if (idle_time < BACKLIGHT_DIM_TIMEOUT_MS && backlight_dimmed) {
                 // Touch event restored brightness, reset flag
                 backlight_dimmed = false;

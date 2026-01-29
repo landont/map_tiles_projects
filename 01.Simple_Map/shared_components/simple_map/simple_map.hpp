@@ -47,6 +47,9 @@ public:
     // Get last touch time (milliseconds since boot)
     static uint32_t get_last_touch_time();
 
+    // Reset touch time and restore backlight (call on any user interaction)
+    static void reset_activity_timer();
+
     // Cleanup
     static void cleanup();
 
