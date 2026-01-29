@@ -34,8 +34,8 @@ bool SimpleMap::init(lv_obj_t* parent_screen) {
         .base_path = "/sdcard",
         .tile_folders = {"tiles1"},
         .tile_type_count = 1,
-        .grid_cols = MAP_TILES_DEFAULT_GRID_COLS,
-        .grid_rows = MAP_TILES_DEFAULT_GRID_ROWS,
+        .grid_cols = 5,  // 5 columns
+        .grid_rows = 4,  // 4 rows (5x4 grid = 20 tiles)
         .default_zoom = 18,
         .use_spiram = true,
         .default_tile_type = 0  // Start with tiles1
@@ -206,31 +206,46 @@ void SimpleMap::create_battery_indicator(lv_obj_t* parent_screen) {
 }
 
 void SimpleMap::update_battery_indicator(int percent, bool is_charging) {
-    if (!battery_icon || !battery_label) return;
+    printf("SimpleMap: update_battery_indicator called with percent=%d, is_charging=%d\n", percent, is_charging);
+
+    if (!battery_icon || !battery_label) {
+        printf("SimpleMap: ERROR - battery_icon=%p, battery_label=%p (null check failed)\n",
+               (void*)battery_icon, (void*)battery_label);
+        return;
+    }
 
     // Update label
     if (percent < 0) {
         lv_label_set_text(battery_label, "-%");
+        printf("SimpleMap: Battery label set to '-%%' (unknown)\n");
     } else {
         lv_label_set_text_fmt(battery_label, "%d%%", percent);
+        printf("SimpleMap: Battery label set to '%d%%'\n", percent);
     }
 
     // Update icon color based on level
     lv_color_t color;
+    const char* color_name;
     if (percent < 0) {
         color = lv_color_make(128, 128, 128);  // Gray for unknown
+        color_name = "gray (unknown)";
     } else if (percent <= 20) {
         color = lv_color_make(255, 0, 0);      // Red for low
+        color_name = "red (low)";
     } else if (percent <= 50) {
         color = lv_color_make(255, 165, 0);    // Orange for medium
+        color_name = "orange (medium)";
     } else {
         color = lv_color_make(0, 200, 0);      // Green for good
+        color_name = "green (good)";
     }
 
     if (is_charging) {
         color = lv_color_make(0, 150, 255);    // Blue for charging
+        color_name = "blue (charging)";
     }
 
+    printf("SimpleMap: Battery color set to %s\n", color_name);
     lv_obj_set_style_bg_color(battery_icon, color, 0);
 
     // Update icon width based on percentage (visual fill level)
@@ -238,7 +253,13 @@ void SimpleMap::update_battery_indicator(int percent, bool is_charging) {
         int fill_width = (percent * 28) / 100;  // Max width 28 pixels
         if (fill_width < 4) fill_width = 4;     // Minimum visible width
         lv_obj_set_width(battery_icon, fill_width);
+        printf("SimpleMap: Battery icon width set to %d pixels\n", fill_width);
     }
+
+    // Force UI update
+    lv_obj_invalidate(battery_icon);
+    lv_obj_invalidate(battery_label);
+    printf("SimpleMap: Battery indicator updated successfully\n");
 }
 
 void SimpleMap::zoom_in_event_cb(lv_event_t *e) {
