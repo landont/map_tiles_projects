@@ -27,9 +27,17 @@ uint32_t SimpleMap::last_scroll_time = 0;
 uint32_t SimpleMap::last_gps_update_time = 0;
 uint32_t SimpleMap::last_touch_time = 0;
 map_tiles_handle_t SimpleMap::map_handle = nullptr;
+bool SimpleMap::is_round_display = false;
 
 bool SimpleMap::init(lv_obj_t* parent_screen) {
     if (initialized) return true;
+
+    // Detect display type (round if width == height)
+    lv_display_t *disp = lv_display_get_default();
+    lv_coord_t disp_width = lv_display_get_horizontal_resolution(disp);
+    lv_coord_t disp_height = lv_display_get_vertical_resolution(disp);
+    is_round_display = (disp_width == disp_height);
+    printf("SimpleMap: Display %dx%d, round=%s\n", disp_width, disp_height, is_round_display ? "yes" : "no");
 
     // Initialize the map tiles component
     map_tiles_config_t config = {
@@ -142,10 +150,9 @@ void SimpleMap::create_tile_widgets() {
 }
 
 void SimpleMap::create_zoom_buttons(lv_obj_t* parent_screen) {
-    // Create zoom in button (+) - lower left
+    // Create zoom in button (+)
     zoom_in_btn = lv_btn_create(parent_screen);
     lv_obj_set_size(zoom_in_btn, 50, 50);
-    lv_obj_align(zoom_in_btn, LV_ALIGN_BOTTOM_LEFT, 15, -15);
     lv_obj_set_style_radius(zoom_in_btn, 25, 0);  // Circular button
     lv_obj_set_style_bg_color(zoom_in_btn, lv_color_make(50, 50, 50), 0);
     lv_obj_set_style_bg_opa(zoom_in_btn, LV_OPA_80, 0);
@@ -153,22 +160,39 @@ void SimpleMap::create_zoom_buttons(lv_obj_t* parent_screen) {
     lv_obj_set_style_border_width(zoom_in_btn, 2, 0);
     lv_obj_add_event_cb(zoom_in_btn, zoom_in_event_cb, LV_EVENT_CLICKED, NULL);
 
+    // Position based on display type
+    if (is_round_display) {
+        // Round display: zoom in on left side, centered vertically
+        lv_obj_align(zoom_in_btn, LV_ALIGN_LEFT_MID, 15, 0);
+    } else {
+        // Rectangular display: zoom in at bottom left
+        lv_obj_align(zoom_in_btn, LV_ALIGN_BOTTOM_LEFT, 15, -15);
+    }
+
     lv_obj_t* plus_label = lv_label_create(zoom_in_btn);
     lv_label_set_text(plus_label, "+");
     lv_obj_set_style_text_font(plus_label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(plus_label, lv_color_white(), 0);
     lv_obj_center(plus_label);
 
-    // Create zoom out button (-) - lower right
+    // Create zoom out button (-)
     zoom_out_btn = lv_btn_create(parent_screen);
     lv_obj_set_size(zoom_out_btn, 50, 50);
-    lv_obj_align(zoom_out_btn, LV_ALIGN_BOTTOM_RIGHT, -15, -15);
     lv_obj_set_style_radius(zoom_out_btn, 25, 0);  // Circular button
     lv_obj_set_style_bg_color(zoom_out_btn, lv_color_make(50, 50, 50), 0);
     lv_obj_set_style_bg_opa(zoom_out_btn, LV_OPA_80, 0);
     lv_obj_set_style_border_color(zoom_out_btn, lv_color_white(), 0);
     lv_obj_set_style_border_width(zoom_out_btn, 2, 0);
     lv_obj_add_event_cb(zoom_out_btn, zoom_out_event_cb, LV_EVENT_CLICKED, NULL);
+
+    // Position based on display type
+    if (is_round_display) {
+        // Round display: zoom out on right side, centered vertically
+        lv_obj_align(zoom_out_btn, LV_ALIGN_RIGHT_MID, -15, 0);
+    } else {
+        // Rectangular display: zoom out at bottom right
+        lv_obj_align(zoom_out_btn, LV_ALIGN_BOTTOM_RIGHT, -15, -15);
+    }
 
     lv_obj_t* minus_label = lv_label_create(zoom_out_btn);
     lv_label_set_text(minus_label, "-");
@@ -178,10 +202,9 @@ void SimpleMap::create_zoom_buttons(lv_obj_t* parent_screen) {
 }
 
 void SimpleMap::create_battery_indicator(lv_obj_t* parent_screen) {
-    // Create battery container - upper right (simplified: just percentage text)
+    // Create battery container
     battery_container = lv_obj_create(parent_screen);
     lv_obj_set_size(battery_container, 67, 24);
-    lv_obj_align(battery_container, LV_ALIGN_TOP_RIGHT, -5, 5);
     lv_obj_set_style_bg_color(battery_container, lv_color_make(0, 0, 0), 0);
     lv_obj_set_style_bg_opa(battery_container, LV_OPA_60, 0);
     lv_obj_set_style_border_width(battery_container, 1, 0);
@@ -189,6 +212,15 @@ void SimpleMap::create_battery_indicator(lv_obj_t* parent_screen) {
     lv_obj_set_style_radius(battery_container, 4, 0);
     lv_obj_set_style_pad_all(battery_container, 2, 0);
     lv_obj_clear_flag(battery_container, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Position based on display type
+    if (is_round_display) {
+        // Round display: centered at top
+        lv_obj_align(battery_container, LV_ALIGN_TOP_MID, 0, 15);
+    } else {
+        // Rectangular display: upper right
+        lv_obj_align(battery_container, LV_ALIGN_TOP_RIGHT, -5, 5);
+    }
 
     // Battery icon is now just a colored bar on the left
     battery_icon = lv_obj_create(battery_container);

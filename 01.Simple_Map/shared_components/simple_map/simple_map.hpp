@@ -73,6 +73,7 @@ private:
     static uint32_t last_gps_update_time;  // Timestamp of last GPS update
     static uint32_t last_touch_time;  // Timestamp of last touch event
     static map_tiles_handle_t map_handle;
+    static bool is_round_display;  // True for round/square displays (width == height)
 
     // Helper functions
     static void load_map_tiles();
