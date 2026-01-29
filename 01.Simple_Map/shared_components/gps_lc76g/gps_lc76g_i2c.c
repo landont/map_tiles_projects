@@ -1,4 +1,4 @@
-/* LC76G GPS module implementation - I2C version */
+/* LC76G GPS module implementation - I2C version using legacy driver */
 
 #include "gps_lc76g_i2c.h"
 #include <string.h>
@@ -7,6 +7,7 @@
 #include <math.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/i2c.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 
@@ -14,8 +15,7 @@ static const char *TAG = "GPS_LC76G_I2C";
 
 static bool gps_initialized = false;
 static gps_data_t current_gps_data = {0};
-static i2c_master_dev_handle_t i2c_dev_write = NULL;
-static i2c_master_dev_handle_t i2c_dev_read = NULL;
+static i2c_port_t i2c_port = I2C_NUM_0;
 static TaskHandle_t gps_task_handle = NULL;
 static gps_data_callback_t data_callback = NULL;
 static void *data_callback_user_data = NULL;
@@ -290,6 +290,32 @@ static void parse_nmea_sentence(const char *sentence)
     }
 }
 
+// Legacy I2C write function
+static esp_err_t i2c_write_bytes(uint8_t device_addr, const uint8_t *data, size_t data_len)
+{
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (device_addr << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write(cmd, data, data_len, true);
+    i2c_master_stop(cmd);
+    esp_err_t ret = i2c_master_cmd_begin(i2c_port, cmd, pdMS_TO_TICKS(1000));
+    i2c_cmd_link_delete(cmd);
+    return ret;
+}
+
+// Legacy I2C read function
+static esp_err_t i2c_read_bytes(uint8_t device_addr, uint8_t *data, size_t data_len)
+{
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (device_addr << 1) | I2C_MASTER_READ, true);
+    i2c_master_read(cmd, data, data_len, I2C_MASTER_LAST_NACK);
+    i2c_master_stop(cmd);
+    esp_err_t ret = i2c_master_cmd_begin(i2c_port, cmd, pdMS_TO_TICKS(1000));
+    i2c_cmd_link_delete(cmd);
+    return ret;
+}
+
 // Read NMEA data from LC76G via I2C
 static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *bytes_read)
 {
@@ -298,26 +324,20 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
 
     *bytes_read = 0;
 
-    if (i2c_dev_write == NULL || i2c_dev_read == NULL) {
-        ESP_LOGE(TAG, "I2C device handles are NULL");
-        return ESP_ERR_INVALID_STATE;
-    }
-
     // Step 1: Send init command to get data length
     uint8_t init_cmd[] = {0x08, 0x00, 0x51, 0xAA, 0x04, 0x00, 0x00, 0x00};
-    ret = i2c_master_transmit(i2c_dev_write, init_cmd, sizeof(init_cmd), pdMS_TO_TICKS(500));
+    ret = i2c_write_bytes(GPS_I2C_ADDR_WRITE, init_cmd, sizeof(init_cmd));
     if (ret != ESP_OK) {
-        ESP_LOGI(TAG, "Init cmd failed: %s (this may be normal if GPS not ready)", esp_err_to_name(ret));
+        ESP_LOGD(TAG, "Init cmd failed: %s", esp_err_to_name(ret));
         return ret;
     }
-    ESP_LOGD(TAG, "Init cmd sent OK");
 
     vTaskDelay(pdMS_TO_TICKS(100));
 
     // Step 2: Read data length (4 bytes) from read address
-    ret = i2c_master_receive(i2c_dev_read, read_length, 4, pdMS_TO_TICKS(500));
+    ret = i2c_read_bytes(GPS_I2C_ADDR_READ, read_length, 4);
     if (ret != ESP_OK) {
-        ESP_LOGI(TAG, "Read length failed: %s", esp_err_to_name(ret));
+        ESP_LOGD(TAG, "Read length failed: %s", esp_err_to_name(ret));
         return ret;
     }
     ESP_LOGD(TAG, "Read length: %02X %02X %02X %02X", read_length[0], read_length[1], read_length[2], read_length[3]);
@@ -333,7 +353,7 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
         data_len = buffer_size - 1;
     }
 
-    ESP_LOGD(TAG, "GPS data length: %lu bytes", data_len);
+    ESP_LOGI(TAG, "GPS data available: %lu bytes", data_len);
 
     // Step 3: Send read command with length
     uint8_t read_cmd[8];
@@ -343,7 +363,7 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
     read_cmd[3] = 0xAA;
     memcpy(&read_cmd[4], read_length, 4);
 
-    ret = i2c_master_transmit(i2c_dev_write, read_cmd, sizeof(read_cmd), pdMS_TO_TICKS(500));
+    ret = i2c_write_bytes(GPS_I2C_ADDR_WRITE, read_cmd, sizeof(read_cmd));
     if (ret != ESP_OK) {
         ESP_LOGD(TAG, "Failed to send read command: %s", esp_err_to_name(ret));
         return ret;
@@ -352,7 +372,7 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
     vTaskDelay(pdMS_TO_TICKS(100));
 
     // Step 4: Read NMEA data
-    ret = i2c_master_receive(i2c_dev_read, (uint8_t *)buffer, data_len, pdMS_TO_TICKS(500));
+    ret = i2c_read_bytes(GPS_I2C_ADDR_READ, (uint8_t *)buffer, data_len);
     if (ret != ESP_OK) {
         ESP_LOGD(TAG, "Failed to read NMEA data: %s", esp_err_to_name(ret));
         return ret;
@@ -400,64 +420,29 @@ static void gps_poll_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
-esp_err_t gps_i2c_init(i2c_master_bus_handle_t i2c_bus)
+esp_err_t gps_i2c_init(void *i2c_bus)
 {
+    (void)i2c_bus;  // Not used - we use legacy driver with BSP's I2C port
+
     if (gps_initialized) {
         ESP_LOGW(TAG, "GPS already initialized");
         return ESP_OK;
     }
 
-    if (i2c_bus == NULL) {
-        ESP_LOGE(TAG, "I2C bus handle is NULL");
-        return ESP_ERR_INVALID_ARG;
-    }
+    ESP_LOGI(TAG, "Initializing LC76G GNSS module via I2C (legacy driver)...");
 
-    ESP_LOGI(TAG, "Initializing LC76G GNSS module via I2C...");
+    // The BSP already initialized I2C on I2C_NUM_0
+    // We use the legacy I2C API to communicate with the GPS
+    i2c_port = I2C_NUM_0;
 
-    // Add write device (0x50)
-    i2c_device_config_t dev_cfg_write = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = GPS_I2C_ADDR_WRITE,
-        .scl_speed_hz = 100000,
-        .scl_wait_us = 0,
-        .flags = {
-            .disable_ack_check = false,
-        },
-    };
-
-    esp_err_t ret = i2c_master_bus_add_device(i2c_bus, &dev_cfg_write, &i2c_dev_write);
+    // Test communication with the GPS module
+    uint8_t test_cmd[] = {0x08, 0x00, 0x51, 0xAA, 0x04, 0x00, 0x00, 0x00};
+    esp_err_t ret = i2c_write_bytes(GPS_I2C_ADDR_WRITE, test_cmd, sizeof(test_cmd));
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to add GPS write device: %s", esp_err_to_name(ret));
-        return ret;
-    }
-    ESP_LOGI(TAG, "Added write device at 0x%02X", GPS_I2C_ADDR_WRITE);
-
-    // Add read device (0x54)
-    i2c_device_config_t dev_cfg_read = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = GPS_I2C_ADDR_READ,
-        .scl_speed_hz = 100000,
-        .scl_wait_us = 0,
-        .flags = {
-            .disable_ack_check = false,
-        },
-    };
-
-    ret = i2c_master_bus_add_device(i2c_bus, &dev_cfg_read, &i2c_dev_read);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to add GPS read device: %s", esp_err_to_name(ret));
-        return ret;
-    }
-    ESP_LOGI(TAG, "Added read device at 0x%02X", GPS_I2C_ADDR_READ);
-
-    // Probe write device to verify GPS module exists
-    ret = i2c_master_probe(i2c_bus, GPS_I2C_ADDR_WRITE, pdMS_TO_TICKS(100));
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "GPS module not found at address 0x%02X: %s", GPS_I2C_ADDR_WRITE, esp_err_to_name(ret));
+        ESP_LOGE(TAG, "GPS module not responding at address 0x%02X: %s", GPS_I2C_ADDR_WRITE, esp_err_to_name(ret));
         return ESP_ERR_NOT_FOUND;
     }
-    ESP_LOGI(TAG, "GPS module found at address 0x%02X", GPS_I2C_ADDR_WRITE);
-    // Note: Read address 0x54 only responds after a command is sent to 0x50
+    ESP_LOGI(TAG, "GPS module responding at address 0x%02X", GPS_I2C_ADDR_WRITE);
 
     memset(&current_gps_data, 0, sizeof(current_gps_data));
 
