@@ -7,15 +7,10 @@
 #include "bsp/esp-bsp.h"
 #include "simple_map.hpp"
 #include "battery_monitor.h"
-#include "gps_lc76g.h"
+#include "gps_lc76g_i2c.h"
 
 // Touch reset pin (GPIO 40)
 #define TOUCH_RST_PIN GPIO_NUM_40
-
-// GPS UART pins for ESP32-S3-Touch-AMOLED-1.75
-// Using GPIO 17 (TX) and GPIO 18 (RX) which are available
-#define GPS_TX_PIN    17
-#define GPS_RX_PIN    18
 
 static const char *TAG = "GPS";
 
@@ -114,21 +109,14 @@ extern "C" void app_main(void)
         printf("Battery monitor initialization failed (AXP2101 may not be present)\n");
     }
 
-    // Initialize GPS module
-    gps_config_t gps_config = {
-        .uart_num = UART_NUM_2,
-        .tx_pin = GPS_TX_PIN,
-        .rx_pin = GPS_RX_PIN,
-        .baud_rate = 9600,
-        .update_rate_hz = 1
-    };
-
-    if (gps_init_with_config(&gps_config) == ESP_OK) {
-        gps_register_data_callback(gps_callback, NULL);
-        printf("GPS initialized on UART2 (TX: GPIO%d, RX: GPIO%d) at 9600 baud\n", GPS_TX_PIN, GPS_RX_PIN);
+    // Initialize GPS module via I2C (LC76G on this board uses I2C, not UART)
+    if (gps_i2c_init(i2c_handle) == ESP_OK) {
+        gps_i2c_register_data_callback(gps_callback, NULL);
+        gps_i2c_start(500);  // Poll every 500ms
+        printf("GPS initialized via I2C (addr: 0x50/0x54)\n");
 
         // Set GPS log level to DEBUG to see NMEA sentences
-        esp_log_level_set("GPS_LC76G", ESP_LOG_DEBUG);
+        esp_log_level_set("GPS_LC76G_I2C", ESP_LOG_DEBUG);
     } else {
         printf("GPS initialization failed\n");
     }
