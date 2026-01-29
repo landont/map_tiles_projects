@@ -1,7 +1,7 @@
 # Functional Specification Document (FSD)
 ## ESP32-S3-Touch-LCD-3.5B Map Viewer Application
 
-**Version:** 1.0
+**Version:** 1.1
 **Date:** January 29, 2026
 **Project:** Simple Map Viewer for Waveshare ESP32-S3-Touch-LCD-3.5B
 
@@ -10,14 +10,14 @@
 ## 1. Introduction
 
 ### 1.1 Purpose
-This document specifies the functional requirements and system architecture for an interactive map viewer application running on the Waveshare ESP32-S3-Touch-LCD-3.5B development board. The application displays pre-rendered map tiles from an SD card and provides touch-based navigation with real-time GPS coordinate tracking.
+This document specifies the functional requirements and system architecture for an interactive map viewer application running on the Waveshare ESP32-S3-Touch-LCD-3.5B development board. The application displays pre-rendered map tiles from an SD card and provides touch-based navigation with real-time GPS coordinate tracking and battery status monitoring.
 
 ### 1.2 Scope
 The system provides:
 - Interactive touch-scrollable map display
 - Real-time GPS coordinate calculation from map position
-- Zoom level control (levels 10-19)
-- Manual coordinate entry via on-screen keyboard
+- Zoom level control via touch buttons (levels 10-19)
+- Battery status monitoring via AXP2101 PMIC
 - SD card-based tile storage and retrieval
 
 ### 1.3 Definitions and Acronyms
@@ -27,6 +27,7 @@ The system provides:
 | BSP | Board Support Package |
 | GPS | Global Positioning System |
 | LVGL | Light and Versatile Graphics Library |
+| PMIC | Power Management Integrated Circuit |
 | PSRAM | Pseudo Static Random Access Memory |
 | QSPI | Quad Serial Peripheral Interface |
 | Tile | 256x256 pixel map image segment |
@@ -44,23 +45,25 @@ The system provides:
 │  ┌─────────────────────────────────────────────────────────┐    │
 │  │                      main.cpp                            │    │
 │  │  - Initialize hardware (NVS, I2C, SD card, Display)     │    │
+│  │  - Initialize battery monitor                           │    │
 │  │  - Launch SimpleMap with initial coordinates            │    │
 │  └─────────────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────────────┘
                                 │
-                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      SimpleMap Component                         │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │  simple_map.cpp / simple_map.hpp                        │    │
-│  │  - Map container and tile widget management             │    │
-│  │  - Input panel (lat/lon/zoom controls)                  │    │
-│  │  - Scroll event handling and tile loading               │    │
-│  │  - GPS coordinate conversion                            │    │
-│  └─────────────────────────────────────────────────────────┘    │
-└─────────────────────────────────────────────────────────────────┘
-                                │
-                                ▼
+                ┌───────────────┴───────────────┐
+                ▼                               ▼
+┌───────────────────────────────┐ ┌───────────────────────────────┐
+│     SimpleMap Component       │ │   battery_monitor Component   │
+│  ┌─────────────────────────┐  │ │  ┌─────────────────────────┐  │
+│  │  simple_map.cpp/.hpp    │  │ │  │  battery_monitor.cpp/.h │  │
+│  │  - Map tile display     │  │ │  │  - AXP2101 PMIC driver  │  │
+│  │  - Zoom buttons         │  │ │  │  - Battery % reading    │  │
+│  │  - Battery indicator UI │  │ │  │  - Charge state detect  │  │
+│  │  - Scroll handling      │  │ │  │  - Periodic update task │  │
+│  └─────────────────────────┘  │ │  └─────────────────────────┘  │
+└───────────────────────────────┘ └───────────────────────────────┘
+                │                               │
+                ▼                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    map_tiles Component                           │
 │  ┌─────────────────────────────────────────────────────────┐    │
@@ -89,10 +92,10 @@ The system provides:
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Hardware Layer                              │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────┐   │
-│  │  ESP32-S3  │ │ AXS15231B  │ │  TCA9554   │ │  SD Card   │   │
-│  │   R8      │ │  Display   │ │ IO Expand  │ │  (FAT32)   │   │
-│  └────────────┘ └────────────┘ └────────────┘ └────────────┘   │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────┐│
+│  │ ESP32-S3 │ │AXS15231B │ │ TCA9554  │ │ AXP2101  │ │SD Card ││
+│  │   R8     │ │ Display  │ │IO Expand │ │  PMIC    │ │(FAT32) ││
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └────────┘│
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -110,12 +113,13 @@ The system provides:
 | Touch Controller | Integrated in AXS15231B (I2C) |
 | SD Card Interface | SDMMC native 1-bit mode |
 | IO Expander | TCA9554PWR (I2C address 0x20) |
+| PMIC | AXP2101 (I2C address 0x34) |
 
 #### 2.2.2 Pin Configuration
 
 | Function | GPIO | Notes |
 |----------|------|-------|
-| **I2C Bus** | | |
+| **I2C Bus** | | Shared by touch, IO expander, PMIC |
 | I2C SCL | GPIO 7 | 400 kHz |
 | I2C SDA | GPIO 8 | |
 | **QSPI Display** | | |
@@ -139,13 +143,13 @@ The system provides:
 ### 3.1 Map Display Functions
 
 #### FR-3.1.1 Tile Grid Display
-- **Description:** Display a configurable grid of map tiles (default 5x5)
+- **Description:** Display a 5x4 grid of map tiles (20 tiles total)
 - **Input:** Tile coordinates (X, Y) and zoom level
 - **Output:** Visual map display on LCD
 - **Behavior:**
   - Load tiles from SD card at `/sdcard/tiles1/{zoom}/{x}/{y}.bin`
   - Each tile is 256x256 pixels in RGB565 format
-  - Grid creates a 1280x1280 pixel scrollable area (5x5 tiles)
+  - Grid creates a 1280x1024 pixel scrollable area (5 columns x 4 rows)
 
 #### FR-3.1.2 Touch Scrolling
 - **Description:** Allow users to pan the map by touch dragging
@@ -207,19 +211,19 @@ The system provides:
   - Disabled during tile loading operations
 
 #### FR-3.3.3 Battery Status Indicator
-- **Description:** Visual indicator showing battery level and charging status
-- **Position:** Upper right corner of screen (10px from edges)
-- **Size:** 70x30 pixels
+- **Description:** Compact indicator showing battery level and charging status
+- **Position:** Upper right corner of screen (5px from edges)
+- **Size:** 55x24 pixels
 - **Components:**
-  - Battery icon (rectangle with fill level indicator)
-  - Battery tip (small nub on right side)
+  - Colored status bar (6x16 pixels, left side)
   - Percentage label (e.g., "85%")
 - **Color Coding:**
   - Green: Battery > 50%
   - Orange: Battery 21-50%
   - Red: Battery <= 20%
-  - Blue: Charging
+  - Blue: Charging (USB power connected)
   - Gray: Unknown/No battery
+- **Update Frequency:** Every 5 seconds via background task
 - **API:** `SimpleMap::update_battery_indicator(int percent, bool is_charging)`
 
 #### FR-3.3.4 Loading Indicator
@@ -230,6 +234,28 @@ The system provides:
   - Disappears when all tiles loaded
   - Prevents multiple simultaneous load operations
 
+### 3.4 Battery Monitoring Functions
+
+#### FR-3.4.1 Battery Percentage Reading
+- **Description:** Read battery charge level from AXP2101 PMIC
+- **Output:** Battery percentage (0-100%) or -1 if unavailable
+- **Method:** `battery_monitor_get_percent()`
+
+#### FR-3.4.2 Charging State Detection
+- **Description:** Detect if device is charging via USB
+- **Output:** Boolean charging state
+- **Method:** Uses `isVbusIn()` to detect USB power connection
+- **Behavior:** Blue indicator when USB connected, level-based color when on battery
+
+#### FR-3.4.3 Background Update Task
+- **Description:** Periodic battery status updates
+- **Frequency:** Every 5000ms (configurable)
+- **Behavior:**
+  - Reads battery percentage and charging state
+  - Updates UI via `SimpleMap::update_battery_indicator()`
+  - Acquires LVGL mutex before UI updates
+  - Logs status to serial output
+
 ---
 
 ## 4. Non-Functional Requirements
@@ -238,18 +264,20 @@ The system provides:
 
 | Metric | Requirement |
 |--------|-------------|
-| Tile load time | < 500ms for 25 tiles |
+| Tile load time | < 500ms for 20 tiles |
 | Scroll response | < 50ms latency |
 | GPS update rate | 20 Hz during scroll |
-| Memory usage | < 4 MB PSRAM for tiles |
+| Battery update rate | 0.2 Hz (every 5 seconds) |
+| Memory usage | < 3 MB PSRAM for tiles |
 
 ### 4.2 Memory Configuration
 
 | Resource | Allocation |
 |----------|------------|
-| Main task stack | 10,240 bytes minimum |
+| Main task stack | 16,384 bytes |
+| Battery monitor task stack | 4,096 bytes |
 | LVGL buffer | 320 x 100 pixels |
-| Tile cache | 25 tiles x 131 KB = ~3.3 MB |
+| Tile cache | 20 tiles x 131 KB = ~2.6 MB |
 | Total PSRAM | 8 MB available |
 
 ### 4.3 Storage Requirements
@@ -298,6 +326,7 @@ Conversion formulas:
 ┌─────────────┐
 │   STARTUP   │
 │  - Init HW  │
+│  - Init PMU │
 │  - Mount SD │
 └──────┬──────┘
        │
@@ -306,6 +335,8 @@ Conversion formulas:
 │    IDLE     │◄────────────────────┐
 │  - Display  │                     │
 │    map      │                     │
+│  - Battery  │                     │
+│    updates  │                     │
 └──────┬──────┘                     │
        │                            │
        ├─────── Touch scroll ───────┤
@@ -332,8 +363,8 @@ Conversion formulas:
 
 | State | Description | Exit Conditions |
 |-------|-------------|-----------------|
-| STARTUP | Hardware initialization | Init complete → IDLE |
-| IDLE | Map displayed, awaiting input | Touch → SCROLLING, Button → LOADING |
+| STARTUP | Hardware initialization, PMIC init | Init complete → IDLE |
+| IDLE | Map displayed, battery updating | Touch → SCROLLING, Button → LOADING |
 | SCROLLING | User dragging map | Release + edge → LOADING, Release → IDLE |
 | LOADING | Fetching tiles from SD | Load complete → IDLE |
 
@@ -380,7 +411,29 @@ public:
 };
 ```
 
-### 7.2 BSP Public Interface
+### 7.2 Battery Monitor Public Interface
+
+```c
+// Initialize the battery monitor (AXP2101 PMIC)
+esp_err_t battery_monitor_init(i2c_master_bus_handle_t i2c_bus_handle);
+
+// Start the battery monitoring task
+esp_err_t battery_monitor_start(uint32_t update_interval_ms);
+
+// Stop the battery monitoring task
+void battery_monitor_stop(void);
+
+// Get battery percentage (0-100, or -1 if unavailable)
+int battery_monitor_get_percent(void);
+
+// Check if battery is charging
+bool battery_monitor_is_charging(void);
+
+// Get battery voltage in mV
+uint16_t battery_monitor_get_voltage(void);
+```
+
+### 7.3 BSP Public Interface
 
 ```c
 // I2C Management
@@ -424,6 +477,7 @@ esp_io_expander_handle_t bsp_io_expander_init(void);
 | esp_lvgl_port | ^2.4.1 | espressif |
 | esp_io_expander | ^1.0.0 | espressif |
 | esp_io_expander_tca9554 | ^2.0.0 | espressif |
+| XPowersLib | 0.2.x | lewisxhe/XPowersLib |
 
 ### 8.2 Build Configuration
 
@@ -436,8 +490,10 @@ CONFIG_SPIRAM_MODE_OCT=y
 CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_LV_COLOR_DEPTH_16=y
 CONFIG_LV_COLOR_16_SWAP=y
+CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_16=y
 CONFIG_BSP_DISPLAY_LVGL_BUF_HEIGHT=100
-CONFIG_ESP_MAIN_TASK_STACK_SIZE=10240
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=16384
 ```
 
 ---
@@ -450,9 +506,10 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=10240
 |-----------|-----------|----------|
 | SD card not mounted | bsp_sdcard_mount() returns error | Log error, display fails |
 | Tile file not found | map_tiles_load_tile() returns false | Display gray placeholder |
-| Invalid coordinates | Validation in textarea_event_cb | Reject input, keep previous value |
 | PSRAM exhausted | Allocation failure | Graceful degradation with smaller grid |
 | Display init failure | bsp_display_start() returns NULL | Log error, abort |
+| PMIC init failure | battery_monitor_init() returns error | Continue without battery monitoring |
+| Stack overflow | FreeRTOS detection | Increase CONFIG_ESP_MAIN_TASK_STACK_SIZE |
 
 ### 9.2 Debug Output
 
@@ -463,6 +520,8 @@ Key log messages for troubleshooting:
 "SimpleMap: Tile loading completed in %lu ms"
 "SimpleMap: Changing zoom from %d to %d"
 "SimpleMap: Centered map on GPS %.6f, %.6f"
+"battery_monitor: Battery: %d%%, %umV, vbus=%d -> CHARGING/ON BATTERY"
+"battery_monitor: Battery monitor started (update every %lu ms)"
 ```
 
 ---
@@ -475,6 +534,7 @@ Key log messages for troubleshooting:
 - Waypoint markers and route display
 - Offline tile download via WiFi
 - Gesture support (pinch-to-zoom)
+- Low battery warnings and power saving mode
 
 ### 10.2 Hardware Compatibility
 The SimpleMap component is designed for portability across ESP32 platforms:
@@ -498,19 +558,28 @@ waveshare_esp32_s3_touch_lcd_3_5b/
 │   ├── idf_component.yml
 │   └── main.cpp                        # Application entry point
 └── components/
-    └── esp32_s3_touch_lcd_3_5b/        # Board Support Package
+    ├── esp32_s3_touch_lcd_3_5b/        # Board Support Package
+    │   ├── CMakeLists.txt
+    │   ├── idf_component.yml
+    │   ├── Kconfig
+    │   ├── esp32_s3_touch_lcd_3_5b.c   # BSP implementation
+    │   ├── include/
+    │   │   └── bsp/
+    │   │       ├── esp32_s3_touch_lcd_3_5b.h
+    │   │       ├── display.h
+    │   │       ├── touch.h
+    │   │       └── config.h
+    │   └── priv_include/
+    │       └── bsp_err_check.h
+    ├── battery_monitor/                 # Battery monitoring component
+    │   ├── CMakeLists.txt
+    │   ├── battery_monitor.h
+    │   └── battery_monitor.cpp
+    └── XPowersLib/                      # AXP2101 PMIC library
         ├── CMakeLists.txt
-        ├── idf_component.yml
-        ├── Kconfig
-        ├── esp32_s3_touch_lcd_3_5b.c   # BSP implementation
-        ├── include/
-        │   └── bsp/
-        │       ├── esp32_s3_touch_lcd_3_5b.h
-        │       ├── display.h
-        │       ├── touch.h
-        │       └── config.h
-        └── priv_include/
-            └── bsp_err_check.h
+        └── src/
+            ├── XPowersLib.h
+            └── ...
 ```
 
 ---
@@ -520,3 +589,4 @@ waveshare_esp32_s3_touch_lcd_3_5b/
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | 2026-01-29 | Claude Opus 4.5 | Initial release |
+| 1.1 | 2026-01-29 | Claude Opus 4.5 | Added battery monitoring (AXP2101), simplified UI (zoom buttons, compact battery indicator), changed tile grid to 5x4, increased main task stack to 16KB |
