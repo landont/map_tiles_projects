@@ -125,7 +125,10 @@ extern "C" void app_main(void)
 
     if (gps_init_with_config(&gps_config) == ESP_OK) {
         gps_register_data_callback(gps_callback, NULL);
-        printf("GPS initialized on UART2 (TX: GPIO%d, RX: GPIO%d)\n", GPS_TX_PIN, GPS_RX_PIN);
+        printf("GPS initialized on UART2 (TX: GPIO%d, RX: GPIO%d) at 9600 baud\n", GPS_TX_PIN, GPS_RX_PIN);
+
+        // Set GPS log level to DEBUG to see NMEA sentences
+        esp_log_level_set("GPS_LC76G", ESP_LOG_DEBUG);
     } else {
         printf("GPS initialization failed\n");
     }

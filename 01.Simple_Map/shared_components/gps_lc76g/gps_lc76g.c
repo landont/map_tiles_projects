@@ -339,6 +339,8 @@ static void parse_gsv(const char *sentence)
 
 static void parse_nmea_sentence(const char *sentence)
 {
+    // Log raw NMEA sentences at debug level
+    ESP_LOGD(TAG, "NMEA: %s", sentence);
 
     if (!nmea_verify_checksum(sentence)) {
         ESP_LOGW(TAG, "Invalid checksum: %s", sentence);
@@ -386,6 +388,7 @@ static void gps_rx_task(void *arg)
                 case UART_DATA:
                 {
                     int len = uart_read_bytes(gps_uart_num, buffer, event.size, pdMS_TO_TICKS(100));
+                    ESP_LOGD(TAG, "UART received %d bytes", len);
 
                     for (int i = 0; i < len; i++) {
                         char c = buffer[i];
