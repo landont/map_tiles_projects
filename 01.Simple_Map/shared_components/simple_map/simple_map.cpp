@@ -254,8 +254,8 @@ void SimpleMap::zoom_in_event_cb(lv_event_t *e) {
     if (is_loading) return;
 
     int new_zoom = current_zoom + 1;
-    if (new_zoom > 19) {
-        printf("SimpleMap: Already at maximum zoom level (19)\n");
+    if (new_zoom > 18) {
+        printf("SimpleMap: Already at maximum zoom level (18)\n");
         return;
     }
 
@@ -267,8 +267,8 @@ void SimpleMap::zoom_out_event_cb(lv_event_t *e) {
     if (is_loading) return;
 
     int new_zoom = current_zoom - 1;
-    if (new_zoom < 10) {
-        printf("SimpleMap: Already at minimum zoom level (10)\n");
+    if (new_zoom < 12) {
+        printf("SimpleMap: Already at minimum zoom level (12)\n");
         return;
     }
 
@@ -279,15 +279,15 @@ void SimpleMap::zoom_out_event_cb(lv_event_t *e) {
 void SimpleMap::update_zoom_buttons_visibility() {
     if (!zoom_in_btn || !zoom_out_btn) return;
 
-    // Hide zoom in button at max zoom (19)
-    if (current_zoom >= 19) {
+    // Hide zoom in button at max zoom (18)
+    if (current_zoom >= 18) {
         lv_obj_add_flag(zoom_in_btn, LV_OBJ_FLAG_HIDDEN);
     } else {
         lv_obj_clear_flag(zoom_in_btn, LV_OBJ_FLAG_HIDDEN);
     }
 
-    // Hide zoom out button at min zoom (10)
-    if (current_zoom <= 10) {
+    // Hide zoom out button at min zoom (12)
+    if (current_zoom <= 12) {
         lv_obj_add_flag(zoom_out_btn, LV_OBJ_FLAG_HIDDEN);
     } else {
         lv_obj_clear_flag(zoom_out_btn, LV_OBJ_FLAG_HIDDEN);
