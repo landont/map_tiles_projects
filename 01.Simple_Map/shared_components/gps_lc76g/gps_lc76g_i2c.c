@@ -296,32 +296,34 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
     esp_err_t ret;
     uint8_t read_length[4] = {0};
 
+    *bytes_read = 0;
+
     // Step 1: Send init command to get data length
     uint8_t init_cmd[] = {0x08, 0x00, 0x51, 0xAA, 0x04, 0x00, 0x00, 0x00};
-    ret = i2c_master_transmit(i2c_dev_write, init_cmd, sizeof(init_cmd), pdMS_TO_TICKS(1000));
+    ret = i2c_master_transmit(i2c_dev_write, init_cmd, sizeof(init_cmd), pdMS_TO_TICKS(500));
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to send init command: %s", esp_err_to_name(ret));
+        ESP_LOGD(TAG, "Failed to send init command: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    vTaskDelay(pdMS_TO_TICKS(50));
+    vTaskDelay(pdMS_TO_TICKS(100));
 
-    // Step 2: Read data length (4 bytes)
-    ret = i2c_master_receive(i2c_dev_read, read_length, 4, pdMS_TO_TICKS(1000));
+    // Step 2: Read data length (4 bytes) from read address
+    ret = i2c_master_receive(i2c_dev_read, read_length, 4, pdMS_TO_TICKS(500));
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to read data length: %s", esp_err_to_name(ret));
+        ESP_LOGD(TAG, "Failed to read data length: %s", esp_err_to_name(ret));
         return ret;
     }
 
     uint32_t data_len = read_length[0] | (read_length[1] << 8) | (read_length[2] << 16) | (read_length[3] << 24);
 
-    if (data_len == 0) {
-        *bytes_read = 0;
+    if (data_len == 0 || data_len > 2000) {
+        // No data or invalid length
         return ESP_OK;
     }
 
-    if (data_len > buffer_size) {
-        data_len = buffer_size;
+    if (data_len > buffer_size - 1) {
+        data_len = buffer_size - 1;
     }
 
     ESP_LOGD(TAG, "GPS data length: %lu bytes", data_len);
@@ -334,18 +336,18 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
     read_cmd[3] = 0xAA;
     memcpy(&read_cmd[4], read_length, 4);
 
-    ret = i2c_master_transmit(i2c_dev_write, read_cmd, sizeof(read_cmd), pdMS_TO_TICKS(1000));
+    ret = i2c_master_transmit(i2c_dev_write, read_cmd, sizeof(read_cmd), pdMS_TO_TICKS(500));
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to send read command: %s", esp_err_to_name(ret));
+        ESP_LOGD(TAG, "Failed to send read command: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    vTaskDelay(pdMS_TO_TICKS(50));
+    vTaskDelay(pdMS_TO_TICKS(100));
 
     // Step 4: Read NMEA data
-    ret = i2c_master_receive(i2c_dev_read, (uint8_t *)buffer, data_len, pdMS_TO_TICKS(1000));
+    ret = i2c_master_receive(i2c_dev_read, (uint8_t *)buffer, data_len, pdMS_TO_TICKS(500));
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to read NMEA data: %s", esp_err_to_name(ret));
+        ESP_LOGD(TAG, "Failed to read NMEA data: %s", esp_err_to_name(ret));
         return ret;
     }
 
@@ -398,6 +400,11 @@ esp_err_t gps_i2c_init(i2c_master_bus_handle_t i2c_bus)
         return ESP_OK;
     }
 
+    if (i2c_bus == NULL) {
+        ESP_LOGE(TAG, "I2C bus handle is NULL");
+        return ESP_ERR_INVALID_ARG;
+    }
+
     ESP_LOGI(TAG, "Initializing LC76G GNSS module via I2C...");
 
     // Add write device (0x50)
@@ -405,6 +412,10 @@ esp_err_t gps_i2c_init(i2c_master_bus_handle_t i2c_bus)
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = GPS_I2C_ADDR_WRITE,
         .scl_speed_hz = 100000,
+        .scl_wait_us = 0,
+        .flags = {
+            .disable_ack_check = false,
+        },
     };
 
     esp_err_t ret = i2c_master_bus_add_device(i2c_bus, &dev_cfg_write, &i2c_dev_write);
@@ -412,18 +423,40 @@ esp_err_t gps_i2c_init(i2c_master_bus_handle_t i2c_bus)
         ESP_LOGE(TAG, "Failed to add GPS write device: %s", esp_err_to_name(ret));
         return ret;
     }
+    ESP_LOGI(TAG, "Added write device at 0x%02X", GPS_I2C_ADDR_WRITE);
 
     // Add read device (0x54)
     i2c_device_config_t dev_cfg_read = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = GPS_I2C_ADDR_READ,
         .scl_speed_hz = 100000,
+        .scl_wait_us = 0,
+        .flags = {
+            .disable_ack_check = false,
+        },
     };
 
     ret = i2c_master_bus_add_device(i2c_bus, &dev_cfg_read, &i2c_dev_read);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to add GPS read device: %s", esp_err_to_name(ret));
         return ret;
+    }
+    ESP_LOGI(TAG, "Added read device at 0x%02X", GPS_I2C_ADDR_READ);
+
+    // Probe write device to verify it exists
+    ret = i2c_master_probe(i2c_bus, GPS_I2C_ADDR_WRITE, pdMS_TO_TICKS(100));
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "GPS write address (0x%02X) not responding: %s", GPS_I2C_ADDR_WRITE, esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "GPS write address (0x%02X) responding", GPS_I2C_ADDR_WRITE);
+    }
+
+    // Probe read device
+    ret = i2c_master_probe(i2c_bus, GPS_I2C_ADDR_READ, pdMS_TO_TICKS(100));
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "GPS read address (0x%02X) not responding: %s", GPS_I2C_ADDR_READ, esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "GPS read address (0x%02X) responding", GPS_I2C_ADDR_READ);
     }
 
     memset(&current_gps_data, 0, sizeof(current_gps_data));
