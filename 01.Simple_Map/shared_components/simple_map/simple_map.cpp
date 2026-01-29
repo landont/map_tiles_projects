@@ -80,6 +80,11 @@ bool SimpleMap::init(lv_obj_t* parent_screen) {
     // Create battery indicator
     create_battery_indicator(parent_screen);
 
+    // Set initial battery value (placeholder - integrate AXP2101 for real values)
+    // Call update_battery_indicator() from your app with real values from AXP2101 PMIC
+    update_battery_indicator(-1, false);  // -1 = unknown/no battery connected
+    printf("SimpleMap: Battery indicator initialized (call update_battery_indicator() with real values)\n");
+
     initialized = true;
     return true;
 }
