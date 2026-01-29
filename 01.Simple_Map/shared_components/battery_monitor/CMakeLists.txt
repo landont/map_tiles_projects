@@ -16,13 +16,13 @@ if(BSP_COMPONENT)
     idf_component_register(
         SRCS "battery_monitor.cpp"
         INCLUDE_DIRS "."
-        REQUIRES "driver" "XPowersLib" "${BSP_COMPONENT}" "simple_map"
+        REQUIRES "driver" "XPowersLib" "${BSP_COMPONENT}" "simple_map" "gps_lc76g"
     )
 else()
     message(WARNING "battery_monitor: No supported BSP component found")
     idf_component_register(
         SRCS "battery_monitor.cpp"
         INCLUDE_DIRS "."
-        REQUIRES "driver" "XPowersLib" "simple_map"
+        REQUIRES "driver" "XPowersLib" "simple_map" "gps_lc76g"
     )
 endif()

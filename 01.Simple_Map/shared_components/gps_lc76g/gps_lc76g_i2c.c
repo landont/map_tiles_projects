@@ -692,3 +692,8 @@ uint32_t gps_i2c_get_time_since_update(void)
     uint64_t now = esp_timer_get_time() / 1000;
     return (uint32_t)(now - current_gps_data.last_update_ms);
 }
+
+void* gps_i2c_get_mutex(void)
+{
+    return (void*)i2c_mutex;
+}

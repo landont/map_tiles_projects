@@ -92,6 +92,10 @@ gps_fix_type_t gps_i2c_get_fix_type(void);
 uint8_t gps_i2c_get_satellites_in_use(void);
 uint32_t gps_i2c_get_time_since_update(void);
 
+// Get the I2C mutex for shared bus access (for battery monitor, etc.)
+// Other I2C devices on the same bus should use this mutex to prevent conflicts
+void* gps_i2c_get_mutex(void);
+
 #ifdef __cplusplus
 }
 #endif

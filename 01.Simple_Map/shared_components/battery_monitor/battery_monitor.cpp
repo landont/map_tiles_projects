@@ -5,9 +5,11 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "driver/i2c_master.h"
 #include "bsp/esp-bsp.h"
 #include "simple_map.hpp"
+#include "gps_lc76g_i2c.h"
 
 #define XPOWERS_CHIP_AXP2101
 #include "XPowersLib.h"
@@ -26,6 +28,12 @@ static bool initialized = false;
 static bool backlight_dimmed = false;
 static const uint32_t BACKLIGHT_DIM_TIMEOUT_MS = 15000;  // 15 seconds
 
+// Get shared I2C mutex from GPS module
+static SemaphoreHandle_t get_i2c_mutex(void)
+{
+    return (SemaphoreHandle_t)gps_i2c_get_mutex();
+}
+
 // I2C read/write callbacks for XPowersLib
 static int pmu_register_read(uint8_t devAddr, uint8_t regAddr, uint8_t *data, uint8_t len)
 {
@@ -33,7 +41,15 @@ static int pmu_register_read(uint8_t devAddr, uint8_t regAddr, uint8_t *data, ui
         return -1;
     }
 
+    SemaphoreHandle_t mutex = get_i2c_mutex();
+    if (mutex && xSemaphoreTake(mutex, pdMS_TO_TICKS(500)) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to acquire I2C mutex for PMU read");
+        return -1;
+    }
+
     esp_err_t ret = i2c_master_transmit_receive(i2c_device, &regAddr, 1, data, len, pdMS_TO_TICKS(1000));
+
+    if (mutex) xSemaphoreGive(mutex);
     return (ret == ESP_OK) ? 0 : -1;
 }
 
@@ -51,7 +67,16 @@ static int pmu_register_write_byte(uint8_t devAddr, uint8_t regAddr, uint8_t *da
     write_buffer[0] = regAddr;
     memcpy(write_buffer + 1, data, len);
 
+    SemaphoreHandle_t mutex = get_i2c_mutex();
+    if (mutex && xSemaphoreTake(mutex, pdMS_TO_TICKS(500)) != pdTRUE) {
+        ESP_LOGW(TAG, "Failed to acquire I2C mutex for PMU write");
+        free(write_buffer);
+        return -1;
+    }
+
     esp_err_t ret = i2c_master_transmit(i2c_device, write_buffer, len + 1, pdMS_TO_TICKS(1000));
+
+    if (mutex) xSemaphoreGive(mutex);
     free(write_buffer);
     return (ret == ESP_OK) ? 0 : -1;
 }
