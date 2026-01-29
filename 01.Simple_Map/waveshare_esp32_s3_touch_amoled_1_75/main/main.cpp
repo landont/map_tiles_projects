@@ -7,9 +7,34 @@
 #include "bsp/esp-bsp.h"
 #include "simple_map.hpp"
 #include "battery_monitor.h"
+#include "gps_lc76g.h"
 
 // Touch reset pin (GPIO 40)
 #define TOUCH_RST_PIN GPIO_NUM_40
+
+// GPS UART pins for ESP32-S3-Touch-AMOLED-1.75
+// Using GPIO 17 (TX) and GPIO 18 (RX) which are available
+#define GPS_TX_PIN    17
+#define GPS_RX_PIN    18
+
+// GPS data callback - updates the map with GPS position
+static void gps_callback(const gps_data_t *data, void *user_data) {
+    if (data->valid) {
+        // Update map with GPS position
+        if (bsp_display_lock(100)) {
+            SimpleMap::set_gps_position(data->latitude, data->longitude, true);
+            SimpleMap::update_gps_status(data->satellites_used, data->fix_type);
+            bsp_display_unlock();
+        }
+    } else {
+        // No valid fix
+        if (bsp_display_lock(100)) {
+            SimpleMap::set_gps_position(0, 0, false);
+            SimpleMap::update_gps_status(data->satellites_visible, 0);
+            bsp_display_unlock();
+        }
+    }
+}
 
 extern "C" void app_main(void)
 {
@@ -77,5 +102,21 @@ extern "C" void app_main(void)
         battery_monitor_start(5000);  // Update every 5 seconds
     } else {
         printf("Battery monitor initialization failed (AXP2101 may not be present)\n");
+    }
+
+    // Initialize GPS module
+    gps_config_t gps_config = {
+        .uart_num = UART_NUM_2,
+        .tx_pin = GPS_TX_PIN,
+        .rx_pin = GPS_RX_PIN,
+        .baud_rate = 9600,
+        .update_rate_hz = 1
+    };
+
+    if (gps_init_with_config(&gps_config) == ESP_OK) {
+        gps_register_data_callback(gps_callback, NULL);
+        printf("GPS initialized on UART2 (TX: GPIO%d, RX: GPIO%d)\n", GPS_TX_PIN, GPS_RX_PIN);
+    } else {
+        printf("GPS initialization failed\n");
     }
 }

@@ -50,6 +50,19 @@ public:
     // Reset touch time and restore backlight (call on any user interaction)
     static void reset_activity_timer();
 
+    // GPS position tracking
+    // Update GPS position from external GPS module
+    static void set_gps_position(double latitude, double longitude, bool has_fix);
+
+    // Get GPS position
+    static void get_gps_position(double* latitude, double* longitude, bool* has_fix);
+
+    // Update GPS status indicator (satellites in use, fix type)
+    static void update_gps_status(int satellites, int fix_type);
+
+    // Check if user has manually scrolled the map
+    static bool is_user_scrolled();
+
     // Cleanup
     static void cleanup();
 
@@ -63,17 +76,29 @@ private:
     static lv_obj_t* battery_container;
     static lv_obj_t* battery_icon;
     static lv_obj_t* battery_label;
+    static lv_obj_t* gps_container;      // GPS status indicator container
+    static lv_obj_t* gps_icon;           // GPS satellite icon
+    static lv_obj_t* gps_label;          // GPS satellite count label
+    static lv_obj_t* gps_marker;         // GPS position crosshair marker
     static lv_obj_t* loading_popup;
     static double current_lat;
     static double current_lon;
+    static double gps_lat;               // Actual GPS latitude
+    static double gps_lon;               // Actual GPS longitude
+    static bool gps_has_fix;             // GPS has valid fix
     static int current_zoom;
     static bool initialized;
     static bool is_loading;  // Flag to prevent multiple simultaneous loads
+    static bool user_scrolled;  // Flag indicating user has manually scrolled
     static uint32_t last_scroll_time;  // Timestamp of last scroll event
+    static uint32_t last_user_scroll_time;  // Timestamp of last user scroll
     static uint32_t last_gps_update_time;  // Timestamp of last GPS update
     static uint32_t last_touch_time;  // Timestamp of last touch event
     static map_tiles_handle_t map_handle;
     static bool is_round_display;  // True for round/square displays (width == height)
+
+    // Auto-scroll back to GPS timeout (10 seconds)
+    static const uint32_t AUTO_CENTER_TIMEOUT_MS = 10000;
 
     // Helper functions
     static void load_map_tiles();
@@ -81,6 +106,8 @@ private:
     static void map_scroll_event_cb(lv_event_t *e);
     static void create_zoom_buttons(lv_obj_t* parent_screen);
     static void create_battery_indicator(lv_obj_t* parent_screen);
+    static void create_gps_indicator(lv_obj_t* parent_screen);
+    static void update_gps_marker_position();
     static void zoom_in_event_cb(lv_event_t *e);
     static void zoom_out_event_cb(lv_event_t *e);
     static void show_loading_popup();
@@ -88,4 +115,5 @@ private:
     static void update_current_gps_from_map_center();
     static void update_zoom_buttons_visibility();
     static void touch_event_cb(lv_event_t *e);
+    static void check_auto_center();
 };

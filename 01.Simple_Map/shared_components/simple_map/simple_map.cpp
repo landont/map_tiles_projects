@@ -17,13 +17,22 @@ lv_obj_t* SimpleMap::zoom_out_btn = nullptr;
 lv_obj_t* SimpleMap::battery_container = nullptr;
 lv_obj_t* SimpleMap::battery_icon = nullptr;
 lv_obj_t* SimpleMap::battery_label = nullptr;
+lv_obj_t* SimpleMap::gps_container = nullptr;
+lv_obj_t* SimpleMap::gps_icon = nullptr;
+lv_obj_t* SimpleMap::gps_label = nullptr;
+lv_obj_t* SimpleMap::gps_marker = nullptr;
 lv_obj_t* SimpleMap::loading_popup = nullptr;
 double SimpleMap::current_lat = 0.0;
 double SimpleMap::current_lon = 0.0;
+double SimpleMap::gps_lat = 0.0;
+double SimpleMap::gps_lon = 0.0;
+bool SimpleMap::gps_has_fix = false;
 int SimpleMap::current_zoom = 15;
 bool SimpleMap::initialized = false;
 bool SimpleMap::is_loading = false;
+bool SimpleMap::user_scrolled = false;
 uint32_t SimpleMap::last_scroll_time = 0;
+uint32_t SimpleMap::last_user_scroll_time = 0;
 uint32_t SimpleMap::last_gps_update_time = 0;
 uint32_t SimpleMap::last_touch_time = 0;
 map_tiles_handle_t SimpleMap::map_handle = nullptr;
@@ -88,6 +97,9 @@ bool SimpleMap::init(lv_obj_t* parent_screen) {
 
     // Create battery indicator
     create_battery_indicator(parent_screen);
+
+    // Create GPS indicator (left of battery)
+    create_gps_indicator(parent_screen);
 
     // Set initial battery value (placeholder - integrate AXP2101 for real values)
     // Call update_battery_indicator() from your app with real values from AXP2101 PMIC
@@ -236,6 +248,75 @@ void SimpleMap::create_battery_indicator(lv_obj_t* parent_screen) {
     lv_obj_align(battery_label, LV_ALIGN_RIGHT_MID, -2, 0);
 }
 
+void SimpleMap::create_gps_indicator(lv_obj_t* parent_screen) {
+    // Create GPS container (left of battery indicator)
+    gps_container = lv_obj_create(parent_screen);
+    lv_obj_set_size(gps_container, 50, 24);
+    lv_obj_set_style_bg_color(gps_container, lv_color_make(0, 0, 0), 0);
+    lv_obj_set_style_bg_opa(gps_container, LV_OPA_60, 0);
+    lv_obj_set_style_border_width(gps_container, 1, 0);
+    lv_obj_set_style_border_color(gps_container, lv_color_white(), 0);
+    lv_obj_set_style_radius(gps_container, 4, 0);
+    lv_obj_set_style_pad_all(gps_container, 2, 0);
+    lv_obj_clear_flag(gps_container, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Position based on display type (left of battery)
+    if (is_round_display) {
+        // Round display: left of centered battery
+        lv_obj_align(gps_container, LV_ALIGN_TOP_MID, -60, 15);
+    } else {
+        // Rectangular display: left of battery in upper right
+        lv_obj_align(gps_container, LV_ALIGN_TOP_RIGHT, -77, 5);
+    }
+
+    // GPS satellite icon (simple colored bar)
+    gps_icon = lv_obj_create(gps_container);
+    lv_obj_set_size(gps_icon, 14, 16);
+    lv_obj_align(gps_icon, LV_ALIGN_LEFT_MID, 0, 0);
+    lv_obj_set_style_bg_color(gps_icon, lv_color_make(128, 128, 128), 0);  // Gray = no fix
+    lv_obj_set_style_bg_opa(gps_icon, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(gps_icon, 0, 0);
+    lv_obj_set_style_radius(gps_icon, 2, 0);
+    lv_obj_clear_flag(gps_icon, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Create GPS satellite count label
+    gps_label = lv_label_create(gps_container);
+    lv_label_set_text(gps_label, "--");
+    lv_obj_set_style_text_color(gps_label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(gps_label, &lv_font_montserrat_14, 0);
+    lv_obj_align(gps_label, LV_ALIGN_RIGHT_MID, -2, 0);
+
+    // Create GPS marker (crosshair) on the map - initially hidden
+    gps_marker = lv_obj_create(map_group);
+    lv_obj_set_size(gps_marker, 20, 20);
+    lv_obj_set_style_bg_opa(gps_marker, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(gps_marker, 0, 0);
+    lv_obj_clear_flag(gps_marker, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(gps_marker, LV_OBJ_FLAG_HIDDEN);
+
+    // Horizontal line of crosshair
+    lv_obj_t* h_line = lv_obj_create(gps_marker);
+    lv_obj_set_size(h_line, 20, 3);
+    lv_obj_center(h_line);
+    lv_obj_set_style_bg_color(h_line, lv_color_make(255, 0, 0), 0);  // Red crosshair
+    lv_obj_set_style_bg_opa(h_line, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(h_line, 0, 0);
+    lv_obj_set_style_radius(h_line, 0, 0);
+    lv_obj_clear_flag(h_line, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Vertical line of crosshair
+    lv_obj_t* v_line = lv_obj_create(gps_marker);
+    lv_obj_set_size(v_line, 3, 20);
+    lv_obj_center(v_line);
+    lv_obj_set_style_bg_color(v_line, lv_color_make(255, 0, 0), 0);  // Red crosshair
+    lv_obj_set_style_bg_opa(v_line, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(v_line, 0, 0);
+    lv_obj_set_style_radius(v_line, 0, 0);
+    lv_obj_clear_flag(v_line, LV_OBJ_FLAG_SCROLLABLE);
+
+    printf("SimpleMap: GPS indicator initialized\n");
+}
+
 void SimpleMap::update_battery_indicator(int percent, bool is_charging) {
     printf("SimpleMap: update_battery_indicator called with percent=%d, is_charging=%d\n", percent, is_charging);
 
@@ -282,6 +363,116 @@ void SimpleMap::update_battery_indicator(int percent, bool is_charging) {
     lv_obj_invalidate(battery_container);
     lv_refr_now(NULL);  // Force immediate screen refresh
     printf("SimpleMap: Battery indicator updated successfully\n");
+}
+
+void SimpleMap::set_gps_position(double latitude, double longitude, bool has_fix) {
+    gps_lat = latitude;
+    gps_lon = longitude;
+    gps_has_fix = has_fix;
+
+    if (has_fix) {
+        // Update GPS marker position on the map
+        update_gps_marker_position();
+
+        // Check if we should auto-center on GPS
+        check_auto_center();
+    }
+
+    // Show/hide GPS marker based on fix status
+    if (gps_marker) {
+        if (has_fix) {
+            lv_obj_clear_flag(gps_marker, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(gps_marker, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+}
+
+void SimpleMap::get_gps_position(double* latitude, double* longitude, bool* has_fix) {
+    if (latitude) *latitude = gps_lat;
+    if (longitude) *longitude = gps_lon;
+    if (has_fix) *has_fix = gps_has_fix;
+}
+
+void SimpleMap::update_gps_status(int satellites, int fix_type) {
+    if (!gps_icon || !gps_label) return;
+
+    // Update satellite count label
+    if (satellites >= 0) {
+        lv_label_set_text_fmt(gps_label, "%d", satellites);
+    } else {
+        lv_label_set_text(gps_label, "--");
+    }
+
+    // Update GPS icon color based on fix type
+    lv_color_t color;
+    if (fix_type >= 3) {
+        // 3D fix - green
+        color = lv_color_make(0, 200, 0);
+    } else if (fix_type >= 2) {
+        // 2D fix - yellow
+        color = lv_color_make(255, 200, 0);
+    } else if (satellites > 0) {
+        // Acquiring fix - orange
+        color = lv_color_make(255, 128, 0);
+    } else {
+        // No signal - gray
+        color = lv_color_make(128, 128, 128);
+    }
+    lv_obj_set_style_bg_color(gps_icon, color, 0);
+
+    lv_obj_invalidate(gps_container);
+}
+
+bool SimpleMap::is_user_scrolled() {
+    return user_scrolled;
+}
+
+void SimpleMap::update_gps_marker_position() {
+    if (!gps_marker || !map_handle || !gps_has_fix) return;
+
+    // Convert GPS coordinates to tile coordinates
+    double x, y;
+    map_tiles_gps_to_tile_xy(map_handle, gps_lat, gps_lon, &x, &y);
+
+    // Get current tile position (top-left of the grid)
+    int tile_x, tile_y;
+    map_tiles_get_position(map_handle, &tile_x, &tile_y);
+
+    // Calculate pixel position relative to the map_group
+    int marker_x = (int)((x - tile_x) * MAP_TILES_TILE_SIZE) - 10;  // Center the 20px marker
+    int marker_y = (int)((y - tile_y) * MAP_TILES_TILE_SIZE) - 10;
+
+    // Position the marker
+    lv_obj_set_pos(gps_marker, marker_x, marker_y);
+}
+
+void SimpleMap::check_auto_center() {
+    if (!user_scrolled || !gps_has_fix) return;
+
+    uint32_t current_time = esp_timer_get_time() / 1000;
+    uint32_t idle_time = current_time - last_user_scroll_time;
+
+    if (idle_time >= AUTO_CENTER_TIMEOUT_MS) {
+        printf("SimpleMap: Auto-centering on GPS after %lu ms of inactivity\n", idle_time);
+
+        // Update map center to GPS position
+        current_lat = gps_lat;
+        current_lon = gps_lon;
+
+        // Recenter the map
+        map_tiles_set_center_from_gps(map_handle, gps_lat, gps_lon);
+        load_map_tiles();
+
+        // Center the view after tiles load
+        lv_timer_create([](lv_timer_t *t) {
+            lv_timer_del(t);
+            center_map_on_gps();
+            update_gps_marker_position();
+        }, 200, NULL);
+
+        user_scrolled = false;
+    }
 }
 
 void SimpleMap::zoom_in_event_cb(lv_event_t *e) {
@@ -477,6 +668,9 @@ void SimpleMap::load_map_tiles() {
         // Hide loading popup
         hide_loading_popup();
 
+        // Update GPS marker position after tiles are loaded
+        update_gps_marker_position();
+
         // Clear loading flag
         is_loading = false;
 
@@ -498,6 +692,14 @@ void SimpleMap::map_scroll_event_cb(lv_event_t *e)
             update_current_gps_from_map_center();
             last_gps_update_time = current_time;
         }
+
+        // Mark that user has manually scrolled (for auto-center feature)
+        if (!user_scrolled) {
+            user_scrolled = true;
+            printf("SimpleMap: User scroll detected\n");
+        }
+        last_user_scroll_time = current_time;
+
         return;
     }
 
@@ -514,6 +716,7 @@ void SimpleMap::map_scroll_event_cb(lv_event_t *e)
             return;
         }
         last_scroll_time = current_time;
+        last_user_scroll_time = current_time;
 
         bool needUpdate = false;
         int tile_x, tile_y;
@@ -626,6 +829,9 @@ void SimpleMap::center_map_on_gps()
 
     // Apply the scroll to center the GPS coordinates
     lv_obj_scroll_to(map_container, center_scroll_x, center_scroll_y, LV_ANIM_OFF);
+
+    // Update GPS marker position after centering
+    update_gps_marker_position();
 
     printf("SimpleMap: Centered map on GPS %.6f, %.6f (scroll: %d, %d)\n",
            current_lat, current_lon, center_scroll_x, center_scroll_y);
@@ -740,6 +946,11 @@ void SimpleMap::cleanup() {
         battery_container = nullptr;
     }
 
+    if (gps_container) {
+        lv_obj_delete(gps_container);
+        gps_container = nullptr;
+    }
+
     if (loading_popup) {
         lv_obj_delete(loading_popup);
         loading_popup = nullptr;
@@ -748,6 +959,9 @@ void SimpleMap::cleanup() {
     map_group = nullptr;  // Will be cleaned up when map_container is deleted
     battery_icon = nullptr;
     battery_label = nullptr;
+    gps_icon = nullptr;
+    gps_label = nullptr;
+    gps_marker = nullptr;  // Cleaned up with map_group
 
     // Clean up the map tiles component
     if (map_handle) {
@@ -768,8 +982,11 @@ void SimpleMap::cleanup() {
 
     // Reset loading flag
     is_loading = false;
+    user_scrolled = false;
     last_scroll_time = 0;
+    last_user_scroll_time = 0;
     last_gps_update_time = 0;
+    gps_has_fix = false;
 
     initialized = false;
 }
