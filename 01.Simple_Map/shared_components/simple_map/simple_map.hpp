@@ -78,4 +78,5 @@ private:
     static void show_loading_popup();
     static void hide_loading_popup();
     static void update_current_gps_from_map_center();
+    static void update_zoom_buttons_visibility();
 };

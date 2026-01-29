@@ -77,6 +77,9 @@ bool SimpleMap::init(lv_obj_t* parent_screen) {
     // Create zoom buttons
     create_zoom_buttons(parent_screen);
 
+    // Update zoom button visibility based on initial zoom level
+    update_zoom_buttons_visibility();
+
     // Create battery indicator
     create_battery_indicator(parent_screen);
 
@@ -171,7 +174,7 @@ void SimpleMap::create_zoom_buttons(lv_obj_t* parent_screen) {
 void SimpleMap::create_battery_indicator(lv_obj_t* parent_screen) {
     // Create battery container - upper right (simplified: just percentage text)
     battery_container = lv_obj_create(parent_screen);
-    lv_obj_set_size(battery_container, 55, 24);
+    lv_obj_set_size(battery_container, 67, 24);
     lv_obj_align(battery_container, LV_ALIGN_TOP_RIGHT, -5, 5);
     lv_obj_set_style_bg_color(battery_container, lv_color_make(0, 0, 0), 0);
     lv_obj_set_style_bg_opa(battery_container, LV_OPA_60, 0);
@@ -183,7 +186,7 @@ void SimpleMap::create_battery_indicator(lv_obj_t* parent_screen) {
 
     // Battery icon is now just a colored bar on the left
     battery_icon = lv_obj_create(battery_container);
-    lv_obj_set_size(battery_icon, 6, 16);
+    lv_obj_set_size(battery_icon, 18, 16);
     lv_obj_align(battery_icon, LV_ALIGN_LEFT_MID, 0, 0);
     lv_obj_set_style_bg_color(battery_icon, lv_color_make(0, 200, 0), 0);  // Green
     lv_obj_set_style_bg_opa(battery_icon, LV_OPA_COVER, 0);
@@ -271,6 +274,24 @@ void SimpleMap::zoom_out_event_cb(lv_event_t *e) {
 
     printf("SimpleMap: Zoom out button pressed, changing from %d to %d\n", current_zoom, new_zoom);
     change_zoom_level(new_zoom);
+}
+
+void SimpleMap::update_zoom_buttons_visibility() {
+    if (!zoom_in_btn || !zoom_out_btn) return;
+
+    // Hide zoom in button at max zoom (19)
+    if (current_zoom >= 19) {
+        lv_obj_add_flag(zoom_in_btn, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_clear_flag(zoom_in_btn, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    // Hide zoom out button at min zoom (10)
+    if (current_zoom <= 10) {
+        lv_obj_add_flag(zoom_out_btn, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_clear_flag(zoom_out_btn, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 void SimpleMap::show_location(double latitude, double longitude, int zoom_level) {
@@ -623,7 +644,8 @@ void SimpleMap::change_zoom_level(int new_zoom) {
     lv_timer_create([](lv_timer_t *t) {
         lv_timer_del(t);
         center_map_on_gps();
-        printf("SimpleMap: Zoom change completed, map centered\n");
+        update_zoom_buttons_visibility();
+        printf("SimpleMap: Zoom change completed, map centered at zoom level %d\n", current_zoom);
     }, 200, NULL);
 }
 
