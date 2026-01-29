@@ -112,7 +112,7 @@ extern "C" void app_main(void)
     // Initialize GPS module via I2C (LC76G on this board uses I2C, not UART)
     if (gps_i2c_init(i2c_handle) == ESP_OK) {
         gps_i2c_register_data_callback(gps_callback, NULL);
-        gps_i2c_start(500);  // Poll every 500ms
+        gps_i2c_start(1000);  // Poll every 1 second (matches GPS update rate)
         printf("GPS initialized via I2C (addr: 0x50/0x54)\n");
 
         // Set GPS log level to DEBUG to see NMEA sentences

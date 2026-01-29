@@ -313,6 +313,9 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
         return ESP_ERR_TIMEOUT;
     }
 
+    // Small delay to ensure I2C bus is idle
+    vTaskDelay(pdMS_TO_TICKS(10));
+
     // Step 1: Send init command to write address (0x50)
     uint8_t init_cmd[] = {0x08, 0x00, 0x51, 0xAA, 0x04, 0x00, 0x00, 0x00};
     ret = i2c_master_transmit(i2c_dev_write, init_cmd, sizeof(init_cmd), pdMS_TO_TICKS(500));
