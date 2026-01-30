@@ -367,7 +367,7 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
         return ESP_OK;
     }
 
-    if (data_len > 2000) {
+    if (data_len > 10000) {
         ESP_LOGW(TAG, "Invalid data length: %lu (too large)", data_len);
         if (i2c_mutex) xSemaphoreGive(i2c_mutex);
         return ESP_OK;
@@ -419,7 +419,7 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
 // GPS polling task
 static void gps_poll_task(void *pvParameters)
 {
-    char *nmea_buffer = (char *)malloc(2048);
+    char *nmea_buffer = (char *)malloc(12000);  // Large buffer for accumulated GPS data at slow I2C speeds
     if (!nmea_buffer) {
         ESP_LOGE(TAG, "Failed to allocate NMEA buffer");
         vTaskDelete(NULL);
@@ -433,7 +433,7 @@ static void gps_poll_task(void *pvParameters)
 
     while (1) {
         size_t bytes_read = 0;
-        esp_err_t ret = gps_i2c_read_nmea(nmea_buffer, 2047, &bytes_read);
+        esp_err_t ret = gps_i2c_read_nmea(nmea_buffer, 11999, &bytes_read);
 
         if (ret == ESP_OK && bytes_read > 0) {
             consecutive_errors = 0;  // Reset error counter on success
