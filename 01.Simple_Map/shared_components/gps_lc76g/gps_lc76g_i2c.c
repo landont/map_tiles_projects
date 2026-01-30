@@ -280,18 +280,37 @@ static void parse_nmea_sentence(const char *sentence)
         nmea_callback(sentence, nmea_callback_user_data);
     }
 
+    // Extract sentence type (e.g., "GNGGA" from "$GNGGA,...")
+    char msg_type[8] = {0};
+    const char *start = sentence + 1;  // Skip '$'
+    const char *comma = strchr(start, ',');
+    if (comma && (comma - start) < 7) {
+        strncpy(msg_type, start, comma - start);
+    }
+
     if (strstr(sentence, "GGA")) {
         parse_gga(sentence);
+        ESP_LOGI(TAG, "Parsed: %s (lat=%.6f, lon=%.6f, sats=%d)",
+                 msg_type, current_gps_data.latitude, current_gps_data.longitude,
+                 current_gps_data.satellites_used);
     } else if (strstr(sentence, "RMC")) {
         parse_rmc(sentence);
+        ESP_LOGI(TAG, "Parsed: %s (valid=%d, speed=%.1f km/h)",
+                 msg_type, current_gps_data.valid, current_gps_data.speed_kmh);
 
         if (data_callback && current_gps_data.valid) {
             data_callback(&current_gps_data, data_callback_user_data);
         }
     } else if (strstr(sentence, "GSA")) {
         parse_gsa(sentence);
+        ESP_LOGI(TAG, "Parsed: %s (fix=%d, hdop=%.1f)",
+                 msg_type, current_gps_data.fix_type, current_gps_data.hdop);
     } else if (strstr(sentence, "GSV")) {
         parse_gsv(sentence);
+        ESP_LOGI(TAG, "Parsed: %s (visible=%d)",
+                 msg_type, current_gps_data.satellites_visible);
+    } else {
+        ESP_LOGD(TAG, "Skipped: %s", msg_type);
     }
 }
 
