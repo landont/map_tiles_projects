@@ -529,7 +529,10 @@ double SimpleMap::distance_between(double lat1, double lon1, double lat2, double
 }
 
 void SimpleMap::add_track_point(double lat, double lon) {
-    if (!track_dots) return;
+    if (!track_dots) {
+        printf("SimpleMap: track_dots not allocated\n");
+        return;
+    }
 
     uint32_t now = esp_timer_get_time() / 1000;
 
@@ -540,6 +543,9 @@ void SimpleMap::add_track_point(double lat, double lon) {
         if (dist < TRACK_LOG_MIN_DISTANCE) {
             return;  // Too close to last point, skip
         }
+        printf("SimpleMap: Adding track point, distance from last: %.1fm\n", dist);
+    } else {
+        printf("SimpleMap: Adding first track point\n");
     }
 
     // Add new point to circular buffer
@@ -560,14 +566,18 @@ void SimpleMap::add_track_point(double lat, double lon) {
     // Create yellow dot for this track point if not already created
     if (track_dots[new_idx] == nullptr && map_group) {
         track_dots[new_idx] = lv_obj_create(map_group);
-        lv_obj_set_size(track_dots[new_idx], 6, 6);
-        lv_obj_set_style_bg_color(track_dots[new_idx], lv_color_make(255, 220, 0), 0);  // Yellow
+        lv_obj_set_size(track_dots[new_idx], 8, 8);  // Slightly larger for visibility
+        lv_obj_set_style_bg_color(track_dots[new_idx], lv_color_make(255, 200, 0), 0);  // Bright yellow
         lv_obj_set_style_bg_opa(track_dots[new_idx], LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(track_dots[new_idx], 0, 0);
-        lv_obj_set_style_radius(track_dots[new_idx], 3, 0);  // Circular
+        lv_obj_set_style_border_width(track_dots[new_idx], 1, 0);
+        lv_obj_set_style_border_color(track_dots[new_idx], lv_color_make(200, 150, 0), 0);  // Darker border
+        lv_obj_set_style_radius(track_dots[new_idx], 4, 0);  // Circular
         lv_obj_clear_flag(track_dots[new_idx], LV_OBJ_FLAG_SCROLLABLE);
         lv_obj_clear_flag(track_dots[new_idx], LV_OBJ_FLAG_CLICKABLE);
+        printf("SimpleMap: Created track dot %d\n", new_idx);
     }
+
+    printf("SimpleMap: Track log now has %d points\n", track_log_count);
 }
 
 void SimpleMap::prune_old_track_points() {
@@ -600,6 +610,8 @@ void SimpleMap::update_track_dots_positions() {
     int tile_x, tile_y;
     map_tiles_get_position(map_handle, &tile_x, &tile_y);
 
+    int visible_count = 0;
+
     // Update position of each track dot
     for (int i = 0; i < track_log_count; i++) {
         int idx = (track_log_start + i) % TRACK_LOG_MAX_POINTS;
@@ -611,8 +623,8 @@ void SimpleMap::update_track_dots_positions() {
         map_tiles_gps_to_tile_xy(map_handle, track_log[idx].latitude, track_log[idx].longitude, &x, &y);
 
         // Calculate pixel position relative to the map_group
-        int dot_x = (int)((x - tile_x) * MAP_TILES_TILE_SIZE) - 3;  // Center the 6px dot
-        int dot_y = (int)((y - tile_y) * MAP_TILES_TILE_SIZE) - 3;
+        int dot_x = (int)((x - tile_x) * MAP_TILES_TILE_SIZE) - 4;  // Center the 8px dot
+        int dot_y = (int)((y - tile_y) * MAP_TILES_TILE_SIZE) - 4;
 
         // Check if dot is within visible tile area
         bool in_bounds = (x >= tile_x && x < tile_x + grid_cols &&
@@ -621,9 +633,15 @@ void SimpleMap::update_track_dots_positions() {
         if (in_bounds) {
             lv_obj_set_pos(track_dots[idx], dot_x, dot_y);
             lv_obj_clear_flag(track_dots[idx], LV_OBJ_FLAG_HIDDEN);
+            lv_obj_move_foreground(track_dots[idx]);  // Ensure dots are on top
+            visible_count++;
         } else {
             lv_obj_add_flag(track_dots[idx], LV_OBJ_FLAG_HIDDEN);
         }
+    }
+
+    if (track_log_count > 0) {
+        printf("SimpleMap: Updated %d track dots, %d visible\n", track_log_count, visible_count);
     }
 }
 
