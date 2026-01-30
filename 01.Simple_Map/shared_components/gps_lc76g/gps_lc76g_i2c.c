@@ -509,13 +509,12 @@ static void gps_poll_task(void *pvParameters)
 
                 vTaskDelay(pdMS_TO_TICKS(100));
 
-                // Reset bus via driver
-                i2c_master_bus_reset(i2c_bus_handle);
-                vTaskDelay(pdMS_TO_TICKS(100));
-
-                // Manual I2C bus recovery to unstick any slaves
-                i2c_bus_recovery();
-                vTaskDelay(pdMS_TO_TICKS(500));
+                // Reset bus via driver multiple times
+                for (int i = 0; i < 3; i++) {
+                    i2c_master_bus_reset(i2c_bus_handle);
+                    vTaskDelay(pdMS_TO_TICKS(200));
+                }
+                ESP_LOGI(TAG, "I2C bus reset 3x complete");
 
                 // Recreate write device
                 i2c_device_config_t dev_cfg_write = {
