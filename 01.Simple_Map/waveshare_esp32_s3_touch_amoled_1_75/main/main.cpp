@@ -118,25 +118,24 @@ extern "C" void app_main(void)
 
     bsp_display_unlock();
 
-    // Initialize and start battery monitor
+    // Get I2C bus handle for peripherals
     i2c_master_bus_handle_t i2c_handle = bsp_i2c_get_handle();
-    if (battery_monitor_init(i2c_handle) == ESP_OK) {
-        battery_monitor_start(5000);  // Update every 5 seconds
-    } else {
-        printf("Battery monitor initialization failed (AXP2101 may not be present)\n");
-    }
 
-    // Initialize GPS module via I2C (LC76G on this board uses I2C, not UART)
+    // Initialize GPS first (creates I2C mutex used by other peripherals)
     if (gps_i2c_init(i2c_handle) == ESP_OK) {
         gps_i2c_register_data_callback(gps_callback, NULL);
         gps_i2c_register_error_callback(gps_error_callback, NULL);
         // Hardware reset disabled - GPS reset pin unknown on this board
         gps_i2c_start(1000);  // Poll every 1 second (matches GPS update rate)
         printf("GPS initialized via I2C (addr: 0x50/0x54)\n");
-
-        // Set GPS log level to DEBUG to see NMEA sentences
-        esp_log_level_set("GPS_LC76G_I2C", ESP_LOG_DEBUG);
     } else {
         printf("GPS initialization failed\n");
+    }
+
+    // Initialize battery monitor after GPS (uses GPS I2C mutex)
+    if (battery_monitor_init(i2c_handle) == ESP_OK) {
+        battery_monitor_start(5000);  // Update every 5 seconds
+    } else {
+        printf("Battery monitor initialization failed (AXP2101 may not be present)\n");
     }
 }
