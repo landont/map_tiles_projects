@@ -466,23 +466,38 @@ void SimpleMap::check_auto_center() {
     uint32_t idle_time = current_time - last_user_scroll_time;
 
     if (idle_time >= AUTO_CENTER_TIMEOUT_MS) {
-        printf("SimpleMap: Auto-centering on GPS (%.6f, %.6f) after %lu ms of inactivity\n",
-               gps_lat, gps_lon, idle_time);
+        // Check if GPS position is within currently loaded tile bounds
+        double gps_tile_x, gps_tile_y;
+        map_tiles_gps_to_tile_xy(map_handle, gps_lat, gps_lon, &gps_tile_x, &gps_tile_y);
+
+        int tile_x, tile_y;
+        map_tiles_get_position(map_handle, &tile_x, &tile_y);
+
+        bool gps_in_bounds = (gps_tile_x >= tile_x && gps_tile_x < tile_x + grid_cols &&
+                              gps_tile_y >= tile_y && gps_tile_y < tile_y + grid_rows);
 
         // Update map center to GPS position
         current_lat = gps_lat;
         current_lon = gps_lon;
 
-        // Recenter the map
-        map_tiles_set_center_from_gps(map_handle, gps_lat, gps_lon);
-        load_map_tiles();
-
-        // Center the view after tiles load
-        lv_timer_create([](lv_timer_t *t) {
-            lv_timer_del(t);
+        if (gps_in_bounds) {
+            // GPS is within loaded tiles - just scroll to center, no reload needed
+            printf("SimpleMap: Auto-centering on GPS (%.6f, %.6f) - scroll only\n", gps_lat, gps_lon);
             center_map_on_gps();
             update_gps_marker_position();
-        }, 200, NULL);
+        } else {
+            // GPS is outside loaded tiles - need to reload
+            printf("SimpleMap: Auto-centering on GPS (%.6f, %.6f) - reloading tiles\n", gps_lat, gps_lon);
+            map_tiles_set_center_from_gps(map_handle, gps_lat, gps_lon);
+            load_map_tiles();
+
+            // Center the view after tiles load
+            lv_timer_create([](lv_timer_t *t) {
+                lv_timer_del(t);
+                center_map_on_gps();
+                update_gps_marker_position();
+            }, 200, NULL);
+        }
 
         user_scrolled = false;
     }
@@ -558,22 +573,38 @@ bool SimpleMap::try_auto_center_on_gps() {
         return false;
     }
 
-    printf("SimpleMap: Auto-centering on GPS (%.6f, %.6f)\n", gps_lat, gps_lon);
+    // Check if GPS position is within currently loaded tile bounds
+    double gps_tile_x, gps_tile_y;
+    map_tiles_gps_to_tile_xy(map_handle, gps_lat, gps_lon, &gps_tile_x, &gps_tile_y);
+
+    int tile_x, tile_y;
+    map_tiles_get_position(map_handle, &tile_x, &tile_y);
+
+    bool gps_in_bounds = (gps_tile_x >= tile_x && gps_tile_x < tile_x + grid_cols &&
+                          gps_tile_y >= tile_y && gps_tile_y < tile_y + grid_rows);
 
     // Update map center to GPS position
     current_lat = gps_lat;
     current_lon = gps_lon;
 
-    // Recenter the map
-    map_tiles_set_center_from_gps(map_handle, gps_lat, gps_lon);
-    load_map_tiles();
-
-    // Center the view after tiles load
-    lv_timer_create([](lv_timer_t *t) {
-        lv_timer_del(t);
+    if (gps_in_bounds) {
+        // GPS is within loaded tiles - just scroll to center, no reload needed
+        printf("SimpleMap: Auto-centering on GPS (%.6f, %.6f) - scroll only\n", gps_lat, gps_lon);
         center_map_on_gps();
         update_gps_marker_position();
-    }, 200, NULL);
+    } else {
+        // GPS is outside loaded tiles - need to reload
+        printf("SimpleMap: Auto-centering on GPS (%.6f, %.6f) - reloading tiles\n", gps_lat, gps_lon);
+        map_tiles_set_center_from_gps(map_handle, gps_lat, gps_lon);
+        load_map_tiles();
+
+        // Center the view after tiles load
+        lv_timer_create([](lv_timer_t *t) {
+            lv_timer_del(t);
+            center_map_on_gps();
+            update_gps_marker_position();
+        }, 200, NULL);
+    }
 
     user_scrolled = false;
     return true;
