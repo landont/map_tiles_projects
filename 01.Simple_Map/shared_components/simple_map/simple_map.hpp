@@ -5,7 +5,7 @@
 
 // Track log configuration
 #define TRACK_LOG_MAX_POINTS 600      // 10 minutes at 1 point per second
-#define TRACK_LOG_MIN_DISTANCE 5.0    // Minimum meters between track points
+#define TRACK_LOG_MIN_DISTANCE 1.0    // Minimum meters between track points
 #define TRACK_LOG_DURATION_MS 600000  // 10 minutes in milliseconds
 
 struct TrackPoint {
