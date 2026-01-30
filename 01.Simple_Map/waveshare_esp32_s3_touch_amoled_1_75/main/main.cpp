@@ -12,7 +12,31 @@
 // Touch reset pin (GPIO 40)
 #define TOUCH_RST_PIN GPIO_NUM_40
 
+// GPS reset is on IO expander pin 7 (EXIO7)
+#define GPS_RESET_IO_PIN IO_EXPANDER_PIN_NUM_7
+
 static const char *TAG = "GPS";
+static esp_io_expander_handle_t io_expander = NULL;
+
+// GPS hardware reset callback - toggles reset pin via IO expander
+static void gps_reset_callback(void *user_data) {
+    if (io_expander == NULL) {
+        ESP_LOGW(TAG, "IO expander not available for GPS reset");
+        return;
+    }
+
+    ESP_LOGI(TAG, "Performing GPS hardware reset via EXIO7...");
+
+    // Pull reset low
+    esp_io_expander_set_level(io_expander, GPS_RESET_IO_PIN, 0);
+    vTaskDelay(pdMS_TO_TICKS(100));
+
+    // Release reset (high)
+    esp_io_expander_set_level(io_expander, GPS_RESET_IO_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(500));  // Wait for GPS to boot
+
+    ESP_LOGI(TAG, "GPS hardware reset complete");
+}
 
 // GPS error callback - shows/clears error on display
 static void gps_error_callback(int error_count, void *user_data) {
@@ -72,17 +96,17 @@ extern "C" void app_main(void)
         printf("Failed to mount SD card, error: %s\n", esp_err_to_name(err));
     }
 
-    esp_io_expander_handle_t expander = bsp_io_expander_init();
-    if (expander == NULL) {
+    io_expander = bsp_io_expander_init();
+    if (io_expander == NULL) {
         printf("Failed to initialize IO expander\n");
         return;
     }
 
-    // Reset LCD via IO expander pin 7
-    esp_io_expander_set_dir(expander, IO_EXPANDER_PIN_NUM_7, IO_EXPANDER_OUTPUT);
-    esp_io_expander_set_level(expander, IO_EXPANDER_PIN_NUM_7, 0);
+    // Configure GPS reset pin (EXIO7) as output and pulse reset on startup
+    esp_io_expander_set_dir(io_expander, GPS_RESET_IO_PIN, IO_EXPANDER_OUTPUT);
+    esp_io_expander_set_level(io_expander, GPS_RESET_IO_PIN, 0);  // Assert reset
     vTaskDelay(pdMS_TO_TICKS(100));
-    esp_io_expander_set_level(expander, IO_EXPANDER_PIN_NUM_7, 1);
+    esp_io_expander_set_level(io_expander, GPS_RESET_IO_PIN, 1);  // Release reset
     vTaskDelay(pdMS_TO_TICKS(100));
 
     // Reset touch controller via GPIO 40
@@ -128,6 +152,7 @@ extern "C" void app_main(void)
     if (gps_i2c_init(i2c_handle) == ESP_OK) {
         gps_i2c_register_data_callback(gps_callback, NULL);
         gps_i2c_register_error_callback(gps_error_callback, NULL);
+        gps_i2c_register_reset_callback(gps_reset_callback, NULL);  // Hardware reset via EXIO7
         gps_i2c_start(1000);  // Poll every 1 second (matches GPS update rate)
         printf("GPS initialized via I2C (addr: 0x50/0x54)\n");
 

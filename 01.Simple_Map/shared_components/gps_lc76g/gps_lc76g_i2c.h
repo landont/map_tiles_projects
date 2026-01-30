@@ -76,6 +76,7 @@ typedef struct {
 typedef void (*gps_data_callback_t)(const gps_data_t *data, void *user_data);
 typedef void (*gps_nmea_callback_t)(const char *sentence, void *user_data);
 typedef void (*gps_error_callback_t)(int error_count, void *user_data);
+typedef void (*gps_reset_callback_t)(void *user_data);  // Hardware reset callback
 
 // Initialize GPS using existing I2C bus handle from BSP
 esp_err_t gps_i2c_init(i2c_master_bus_handle_t i2c_bus);
@@ -84,6 +85,7 @@ esp_err_t gps_i2c_get_data(gps_data_t *data);
 esp_err_t gps_i2c_register_data_callback(gps_data_callback_t callback, void *user_data);
 esp_err_t gps_i2c_register_nmea_callback(gps_nmea_callback_t callback, void *user_data);
 esp_err_t gps_i2c_register_error_callback(gps_error_callback_t callback, void *user_data);
+esp_err_t gps_i2c_register_reset_callback(gps_reset_callback_t callback, void *user_data);
 
 // Start/stop the GPS polling task
 esp_err_t gps_i2c_start(uint32_t poll_interval_ms);

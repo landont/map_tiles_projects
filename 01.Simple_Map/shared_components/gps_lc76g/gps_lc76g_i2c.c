@@ -28,8 +28,11 @@ static gps_nmea_callback_t nmea_callback = NULL;
 static void *nmea_callback_user_data = NULL;
 static gps_error_callback_t error_callback = NULL;
 static void *error_callback_user_data = NULL;
+static gps_reset_callback_t reset_callback = NULL;
+static void *reset_callback_user_data = NULL;
 static uint32_t poll_interval = 500;
 static int consecutive_zero_reads = 0;
+static int recovery_attempts = 0;
 
 // NMEA parsing helpers
 static uint8_t nmea_checksum(const char *sentence)
@@ -636,8 +639,27 @@ static void gps_poll_task(void *pvParameters)
                 esp_err_t probe_ret = i2c_master_probe(i2c_bus_handle, GPS_I2C_ADDR_WRITE, pdMS_TO_TICKS(100));
                 if (probe_ret == ESP_OK) {
                     ESP_LOGI(TAG, "GPS device probe successful after recovery");
+                    recovery_attempts = 0;  // Reset on successful probe
                 } else {
                     ESP_LOGW(TAG, "GPS device probe failed after recovery: %s", esp_err_to_name(probe_ret));
+                    recovery_attempts++;
+
+                    // After 2 failed I2C recoveries, try hardware reset if callback registered
+                    if (recovery_attempts >= 2 && reset_callback) {
+                        ESP_LOGW(TAG, "I2C recovery failed %d times, attempting hardware reset...", recovery_attempts);
+                        if (i2c_mutex) xSemaphoreGive(i2c_mutex);
+
+                        // Call the hardware reset callback (toggles reset pin)
+                        reset_callback(reset_callback_user_data);
+
+                        // Wait for GPS to boot after reset
+                        vTaskDelay(pdMS_TO_TICKS(1000));
+
+                        recovery_attempts = 0;
+                        consecutive_errors = 0;
+                        ESP_LOGI(TAG, "Hardware reset complete, resuming...");
+                        continue;  // Skip the rest and resume polling
+                    }
                 }
 
                 if (i2c_mutex) xSemaphoreGive(i2c_mutex);
@@ -819,6 +841,13 @@ esp_err_t gps_i2c_register_error_callback(gps_error_callback_t callback, void *u
 {
     error_callback = callback;
     error_callback_user_data = user_data;
+    return ESP_OK;
+}
+
+esp_err_t gps_i2c_register_reset_callback(gps_reset_callback_t callback, void *user_data)
+{
+    reset_callback = callback;
+    reset_callback_user_data = user_data;
     return ESP_OK;
 }
 
