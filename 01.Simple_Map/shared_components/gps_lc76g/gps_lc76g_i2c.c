@@ -566,8 +566,22 @@ static void gps_poll_task(void *pvParameters)
 
                 if (i2c_mutex) xSemaphoreGive(i2c_mutex);
 
-                consecutive_zero_reads = 0;  // Reset counter to allow another recovery attempt later
-                ESP_LOGI(TAG, "GPS full recovery complete");
+                // Don't reset counter - let it continue to reach 60 for hardware reset
+                ESP_LOGI(TAG, "GPS I2C recovery complete, waiting for data...");
+            }
+
+            // After 60 consecutive zero reads (I2C recovery didn't help), try hardware reset
+            if (consecutive_zero_reads == 60 && reset_callback) {
+                ESP_LOGW(TAG, "GPS still not responding after I2C recovery, attempting hardware reset...");
+
+                // Call the hardware reset callback (toggles reset pin)
+                reset_callback(reset_callback_user_data);
+
+                // Wait for GPS to boot after reset
+                vTaskDelay(pdMS_TO_TICKS(1000));
+
+                consecutive_zero_reads = 0;  // Reset counter after hardware reset
+                ESP_LOGI(TAG, "GPS hardware reset complete, resuming polling...");
             }
         } else {
             // Error occurred
