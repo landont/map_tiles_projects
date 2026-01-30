@@ -26,6 +26,8 @@ static gps_data_callback_t data_callback = NULL;
 static void *data_callback_user_data = NULL;
 static gps_nmea_callback_t nmea_callback = NULL;
 static void *nmea_callback_user_data = NULL;
+static gps_error_callback_t error_callback = NULL;
+static void *error_callback_user_data = NULL;
 static uint32_t poll_interval = 500;
 
 // NMEA parsing helpers
@@ -466,6 +468,11 @@ static void gps_poll_task(void *pvParameters)
             consecutive_errors++;
             ESP_LOGI(TAG, "GPS read error %d: %s", consecutive_errors, esp_err_to_name(ret));
 
+            // Notify error callback
+            if (error_callback) {
+                error_callback(consecutive_errors, error_callback_user_data);
+            }
+
             if (consecutive_errors >= 5) {
                 ESP_LOGW(TAG, "Persistent GPS errors, performing full I2C recovery...");
 
@@ -690,6 +697,13 @@ esp_err_t gps_i2c_register_nmea_callback(gps_nmea_callback_t callback, void *use
 {
     nmea_callback = callback;
     nmea_callback_user_data = user_data;
+    return ESP_OK;
+}
+
+esp_err_t gps_i2c_register_error_callback(gps_error_callback_t callback, void *user_data)
+{
+    error_callback = callback;
+    error_callback_user_data = user_data;
     return ESP_OK;
 }
 

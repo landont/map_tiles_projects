@@ -60,6 +60,9 @@ public:
     // Update GPS status indicator (satellites in use, fix type)
     static void update_gps_status(int satellites, int fix_type);
 
+    // Show GPS I2C error state (red indicator with "ERR" text)
+    static void show_gps_error();
+
     // Check if user has manually scrolled the map
     static bool is_user_scrolled();
 

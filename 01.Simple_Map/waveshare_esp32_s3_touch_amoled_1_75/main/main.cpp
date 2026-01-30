@@ -14,6 +14,14 @@
 
 static const char *TAG = "GPS";
 
+// GPS error callback - shows error on display
+static void gps_error_callback(int error_count, void *user_data) {
+    if (bsp_display_lock(100)) {
+        SimpleMap::show_gps_error();
+        bsp_display_unlock();
+    }
+}
+
 // GPS data callback - updates the map with GPS position
 static void gps_callback(const gps_data_t *data, void *user_data) {
     if (data->valid) {
@@ -112,6 +120,7 @@ extern "C" void app_main(void)
     // Initialize GPS module via I2C (LC76G on this board uses I2C, not UART)
     if (gps_i2c_init(i2c_handle) == ESP_OK) {
         gps_i2c_register_data_callback(gps_callback, NULL);
+        gps_i2c_register_error_callback(gps_error_callback, NULL);
         gps_i2c_start(1000);  // Poll every 1 second (matches GPS update rate)
         printf("GPS initialized via I2C (addr: 0x50/0x54)\n");
 

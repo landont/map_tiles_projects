@@ -424,6 +424,16 @@ void SimpleMap::update_gps_status(int satellites, int fix_type) {
     lv_obj_invalidate(gps_container);
 }
 
+void SimpleMap::show_gps_error() {
+    if (!gps_icon || !gps_label) return;
+
+    // Show "ERR" text in red
+    lv_label_set_text(gps_label, "ERR");
+    lv_obj_set_style_bg_color(gps_icon, lv_color_make(255, 0, 0), 0);
+
+    lv_obj_invalidate(gps_container);
+}
+
 bool SimpleMap::is_user_scrolled() {
     return user_scrolled;
 }
