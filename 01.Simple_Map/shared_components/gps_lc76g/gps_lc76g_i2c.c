@@ -471,10 +471,9 @@ static void gps_poll_task(void *pvParameters)
             consecutive_errors = 0;
             consecutive_zero_reads++;
 
-            // After 5+ consecutive zero reads (5 seconds at 1s poll interval),
-            // notify that GPS data is stale (no satellites visible)
-            if (consecutive_zero_reads >= 5 && data_callback) {
-                ESP_LOGI(TAG, "GPS data stale (%d consecutive zero reads), notifying UI", consecutive_zero_reads);
+            // After exactly 5 consecutive zero reads, notify UI once that GPS is stale
+            if (consecutive_zero_reads == 5 && data_callback) {
+                ESP_LOGI(TAG, "GPS data stale (5 consecutive zero reads), notifying UI");
                 // Create a "no signal" status - mark as invalid with 0 satellites
                 gps_data_t stale_data = {0};
                 stale_data.valid = false;
@@ -482,6 +481,22 @@ static void gps_poll_task(void *pvParameters)
                 stale_data.satellites_used = 0;
                 stale_data.fix_type = GPS_FIX_NONE;
                 data_callback(&stale_data, data_callback_user_data);
+            }
+
+            // After 30+ consecutive zero reads (30 seconds), GPS module may be stuck - try recovery
+            if (consecutive_zero_reads == 30) {
+                ESP_LOGW(TAG, "GPS module not responding (30 zero reads), attempting recovery...");
+
+                // Take mutex before recovery
+                if (i2c_mutex) xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(1000));
+
+                // Reset the I2C bus to try to recover
+                i2c_master_bus_reset(i2c_bus_handle);
+                vTaskDelay(pdMS_TO_TICKS(500));
+
+                if (i2c_mutex) xSemaphoreGive(i2c_mutex);
+
+                ESP_LOGI(TAG, "GPS recovery complete, will retry");
             }
         } else {
             // Error occurred
