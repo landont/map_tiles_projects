@@ -29,6 +29,7 @@ static void *nmea_callback_user_data = NULL;
 static gps_error_callback_t error_callback = NULL;
 static void *error_callback_user_data = NULL;
 static uint32_t poll_interval = 500;
+static int consecutive_zero_reads = 0;
 
 // NMEA parsing helpers
 static uint8_t nmea_checksum(const char *sentence)
@@ -441,6 +442,7 @@ static void gps_poll_task(void *pvParameters)
                 error_callback(0, error_callback_user_data);  // 0 = no error, clears indicator
             }
             consecutive_errors = 0;
+            consecutive_zero_reads = 0;  // Reset zero-read counter on successful data
 
             // Log first 60 chars of data for debugging
             char preview[61];
@@ -465,8 +467,22 @@ static void gps_poll_task(void *pvParameters)
             }
             ESP_LOGI(TAG, "Parsed %d NMEA sentences", sentence_count);
         } else if (ret == ESP_OK && bytes_read == 0) {
-            // No data available, this is normal
+            // No data available - track consecutive zero reads
             consecutive_errors = 0;
+            consecutive_zero_reads++;
+
+            // After 5+ consecutive zero reads (5 seconds at 1s poll interval),
+            // notify that GPS data is stale (no satellites visible)
+            if (consecutive_zero_reads >= 5 && data_callback) {
+                ESP_LOGI(TAG, "GPS data stale (%d consecutive zero reads), notifying UI", consecutive_zero_reads);
+                // Create a "no signal" status - mark as invalid with 0 satellites
+                gps_data_t stale_data = {0};
+                stale_data.valid = false;
+                stale_data.satellites_visible = 0;
+                stale_data.satellites_used = 0;
+                stale_data.fix_type = GPS_FIX_NONE;
+                data_callback(&stale_data, data_callback_user_data);
+            }
         } else {
             // Error occurred
             consecutive_errors++;
