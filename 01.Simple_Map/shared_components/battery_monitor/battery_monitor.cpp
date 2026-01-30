@@ -159,10 +159,11 @@ esp_err_t battery_monitor_init(i2c_master_bus_handle_t i2c_bus_handle)
     ESP_LOGI(TAG, "Initializing AXP2101 PMIC...");
 
     // Add AXP2101 device to I2C bus
+    // Use same 10kHz speed as GPS for bus compatibility
     i2c_device_config_t dev_cfg = {};
     dev_cfg.dev_addr_length = I2C_ADDR_BIT_LEN_7;
     dev_cfg.device_address = AXP2101_I2C_ADDR;
-    dev_cfg.scl_speed_hz = 400000;
+    dev_cfg.scl_speed_hz = 10000;
 
     esp_err_t ret = i2c_master_bus_add_device(i2c_bus_handle, &dev_cfg, &i2c_device);
     if (ret != ESP_OK) {

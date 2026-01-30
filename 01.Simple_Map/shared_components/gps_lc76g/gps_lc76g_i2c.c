@@ -329,6 +329,7 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
     *bytes_read = 0;
 
     if (i2c_dev_write == NULL || i2c_dev_read == NULL) {
+        ESP_LOGE(TAG, "Device handles NULL: write=%p read=%p", i2c_dev_write, i2c_dev_read);
         return ESP_ERR_INVALID_STATE;
     }
 
