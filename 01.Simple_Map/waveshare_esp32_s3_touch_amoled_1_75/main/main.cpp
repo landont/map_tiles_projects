@@ -56,14 +56,17 @@ static void gps_error_callback(int error_count, void *user_data) {
 // GPS data callback - updates the map with GPS position
 static void gps_callback(const gps_data_t *data, void *user_data) {
     if (data->valid) {
-        // Log GPS data
-        ESP_LOGI(TAG, "Fix: %.6f, %.6f | Alt: %.1fm | Speed: %.1f km/h | Sats: %d | HDOP: %.1f",
+        // Log GPS data (include course/heading)
+        ESP_LOGI(TAG, "Fix: %.6f, %.6f | Alt: %.1fm | Speed: %.1f km/h | Course: %.1f | Sats: %d",
                  data->latitude, data->longitude, data->altitude,
-                 data->speed_kmh, data->satellites_used, data->hdop);
+                 data->speed_kmh, data->course, data->satellites_used);
 
-        // Update map with GPS position
+        // Update map with GPS position and heading
+        // Only use heading if moving (speed > 1 km/h), otherwise it's unreliable
+        float heading = (data->speed_kmh > 1.0f) ? data->course : -1.0f;
+
         if (bsp_display_lock(100)) {
-            SimpleMap::set_gps_position(data->latitude, data->longitude, true);
+            SimpleMap::set_gps_position(data->latitude, data->longitude, true, heading);
             SimpleMap::update_gps_status(data->satellites_used, data->fix_type);
             bsp_display_unlock();
         }
@@ -73,7 +76,7 @@ static void gps_callback(const gps_data_t *data, void *user_data) {
 
         // No valid fix
         if (bsp_display_lock(100)) {
-            SimpleMap::set_gps_position(0, 0, false);
+            SimpleMap::set_gps_position(0, 0, false, -1.0f);
             SimpleMap::update_gps_status(data->satellites_visible, 0);
             bsp_display_unlock();
         }

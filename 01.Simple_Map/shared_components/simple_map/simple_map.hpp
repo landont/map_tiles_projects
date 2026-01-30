@@ -3,6 +3,17 @@
 #include "lvgl.h"
 #include "map_tiles.h"
 
+// Track log configuration
+#define TRACK_LOG_MAX_POINTS 600      // 10 minutes at 1 point per second
+#define TRACK_LOG_MIN_DISTANCE 5.0    // Minimum meters between track points
+#define TRACK_LOG_DURATION_MS 600000  // 10 minutes in milliseconds
+
+struct TrackPoint {
+    double latitude;
+    double longitude;
+    uint32_t timestamp;  // Milliseconds since boot
+};
+
 class SimpleMap {
 public:
     // Initialize the simple map system
@@ -55,11 +66,14 @@ public:
     static bool try_auto_center_on_gps();
 
     // GPS position tracking
-    // Update GPS position from external GPS module
-    static void set_gps_position(double latitude, double longitude, bool has_fix);
+    // Update GPS position from external GPS module (includes heading for direction arrow)
+    static void set_gps_position(double latitude, double longitude, bool has_fix, float heading = -1.0f);
 
     // Get GPS position
     static void get_gps_position(double* latitude, double* longitude, bool* has_fix);
+
+    // Clear track log history
+    static void clear_track_log();
 
     // Update GPS status indicator (satellites in use, fix type)
     static void update_gps_status(int satellites, int fix_type);
@@ -86,13 +100,21 @@ private:
     static lv_obj_t* gps_container;      // GPS status indicator container
     static lv_obj_t* gps_icon;           // GPS satellite icon
     static lv_obj_t* gps_label;          // GPS satellite count label
-    static lv_obj_t* gps_marker;         // GPS position crosshair marker
+    static lv_obj_t* gps_marker;         // GPS position direction arrow marker
     static lv_obj_t* loading_popup;
+
+    // Track log storage
+    static TrackPoint track_log[TRACK_LOG_MAX_POINTS];
+    static int track_log_count;          // Number of points in track log
+    static int track_log_start;          // Index of oldest point (circular buffer)
+    static lv_obj_t** track_dots;        // Array of yellow dot objects for track visualization
+    static int track_dots_count;         // Number of allocated track dot objects
     static double current_lat;
     static double current_lon;
     static double gps_lat;               // Actual GPS latitude
     static double gps_lon;               // Actual GPS longitude
     static bool gps_has_fix;             // GPS has valid fix
+    static float gps_heading;            // GPS heading/course in degrees (0-360, -1 = unknown)
     static int current_zoom;
     static bool initialized;
     static bool is_loading;  // Flag to prevent multiple simultaneous loads
@@ -115,6 +137,12 @@ private:
     static void create_battery_indicator(lv_obj_t* parent_screen);
     static void create_gps_indicator(lv_obj_t* parent_screen);
     static void update_gps_marker_position();
+    static void update_gps_marker_rotation();
+    static void add_track_point(double lat, double lon);
+    static void prune_old_track_points();
+    static void update_track_dots_positions();
+    static void create_direction_arrow();
+    static double distance_between(double lat1, double lon1, double lat2, double lon2);
     static void zoom_in_event_cb(lv_event_t *e);
     static void zoom_out_event_cb(lv_event_t *e);
     static void show_loading_popup();
