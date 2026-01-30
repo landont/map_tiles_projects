@@ -9,13 +9,8 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "driver/i2c_master.h"
-#include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_timer.h"
-
-// I2C pins (must match BSP)
-#define I2C_SDA_PIN  GPIO_NUM_15
-#define I2C_SCL_PIN  GPIO_NUM_14
 
 static const char *TAG = "GPS_LC76G_I2C";
 
@@ -298,45 +293,6 @@ static void parse_nmea_sentence(const char *sentence)
     } else if (strstr(sentence, "GSV")) {
         parse_gsv(sentence);
     }
-}
-
-// Manual I2C bus recovery - clock SCL to release stuck slaves
-static void i2c_bus_recovery(void)
-{
-    ESP_LOGW(TAG, "Performing manual I2C bus recovery...");
-
-    // Temporarily configure pins as GPIO
-    gpio_config_t io_conf = {
-        .pin_bit_mask = (1ULL << I2C_SCL_PIN) | (1ULL << I2C_SDA_PIN),
-        .mode = GPIO_MODE_INPUT_OUTPUT_OD,  // Open-drain
-        .pull_up_en = GPIO_PULLUP_ENABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE,
-    };
-    gpio_config(&io_conf);
-
-    // Release SDA and SCL
-    gpio_set_level(I2C_SDA_PIN, 1);
-    gpio_set_level(I2C_SCL_PIN, 1);
-    vTaskDelay(pdMS_TO_TICKS(10));
-
-    // Clock SCL 9 times to release any stuck slave
-    for (int i = 0; i < 9; i++) {
-        gpio_set_level(I2C_SCL_PIN, 0);
-        vTaskDelay(pdMS_TO_TICKS(1));
-        gpio_set_level(I2C_SCL_PIN, 1);
-        vTaskDelay(pdMS_TO_TICKS(1));
-    }
-
-    // Generate STOP condition
-    gpio_set_level(I2C_SDA_PIN, 0);
-    vTaskDelay(pdMS_TO_TICKS(1));
-    gpio_set_level(I2C_SCL_PIN, 1);
-    vTaskDelay(pdMS_TO_TICKS(1));
-    gpio_set_level(I2C_SDA_PIN, 1);
-    vTaskDelay(pdMS_TO_TICKS(10));
-
-    ESP_LOGI(TAG, "I2C bus recovery complete");
 }
 
 // Read NMEA data from LC76G via I2C
