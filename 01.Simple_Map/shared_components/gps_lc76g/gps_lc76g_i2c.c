@@ -296,12 +296,12 @@ static void parse_nmea_sentence(const char *sentence)
 
     if (strstr(sentence, "GGA")) {
         parse_gga(sentence);
-        ESP_LOGI(TAG, "Parsed: %s (lat=%.6f, lon=%.6f, sats=%d)",
+        ESP_LOGD(TAG, "Parsed: %s (lat=%.6f, lon=%.6f, sats=%d)",
                  msg_type, current_gps_data.latitude, current_gps_data.longitude,
                  current_gps_data.satellites_used);
     } else if (strstr(sentence, "RMC")) {
         parse_rmc(sentence);
-        ESP_LOGI(TAG, "Parsed: %s (valid=%d, speed=%.1f km/h)",
+        ESP_LOGD(TAG, "Parsed: %s (valid=%d, speed=%.1f km/h)",
                  msg_type, current_gps_data.valid, current_gps_data.speed_kmh);
 
         if (data_callback && current_gps_data.valid) {
@@ -309,11 +309,11 @@ static void parse_nmea_sentence(const char *sentence)
         }
     } else if (strstr(sentence, "GSA")) {
         parse_gsa(sentence);
-        ESP_LOGI(TAG, "Parsed: %s (fix=%d, hdop=%.1f)",
+        ESP_LOGD(TAG, "Parsed: %s (fix=%d, hdop=%.1f)",
                  msg_type, current_gps_data.fix_type, current_gps_data.hdop);
     } else if (strstr(sentence, "GSV")) {
         parse_gsv(sentence);
-        ESP_LOGI(TAG, "Parsed: %s (visible=%d)",
+        ESP_LOGD(TAG, "Parsed: %s (visible=%d)",
                  msg_type, current_gps_data.satellites_visible);
     } else {
         ESP_LOGD(TAG, "Skipped: %s", msg_type);
@@ -362,7 +362,7 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
     }
 
     uint32_t data_len = read_length[0] | (read_length[1] << 8) | (read_length[2] << 16) | (read_length[3] << 24);
-    ESP_LOGI(TAG, "Read length bytes: %02X %02X %02X %02X = %lu",
+    ESP_LOGD(TAG, "Read length bytes: %02X %02X %02X %02X = %lu",
              read_length[0], read_length[1], read_length[2], read_length[3], data_len);
 
     if (data_len == 0) {
@@ -381,7 +381,7 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
         data_len = buffer_size - 1;
     }
 
-    ESP_LOGI(TAG, "GPS data available: %lu bytes", data_len);
+    ESP_LOGD(TAG, "GPS data available: %lu bytes", data_len);
 
     // Step 3: Send read command with length to write address (0x50)
     uint8_t read_cmd[8];
@@ -415,7 +415,7 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
     // Release mutex before logging
     if (i2c_mutex) xSemaphoreGive(i2c_mutex);
 
-    ESP_LOGI(TAG, "Successfully read %lu bytes of NMEA data", data_len);
+    ESP_LOGD(TAG, "Successfully read %lu bytes of NMEA data", data_len);
 
     return ESP_OK;
 }
@@ -456,7 +456,7 @@ static void gps_poll_task(void *pvParameters)
             for (size_t i = 0; i < preview_len; i++) {
                 if (preview[i] == '\r' || preview[i] == '\n') preview[i] = ' ';
             }
-            ESP_LOGI(TAG, "NMEA preview: %s...", preview);
+            ESP_LOGD(TAG, "NMEA preview: %s...", preview);
 
             // Parse NMEA sentences (separated by newlines)
             int sentence_count = 0;
@@ -468,7 +468,7 @@ static void gps_poll_task(void *pvParameters)
                 }
                 line = strtok(NULL, "\r\n");
             }
-            ESP_LOGI(TAG, "Parsed %d NMEA sentences", sentence_count);
+            ESP_LOGD(TAG, "Parsed %d NMEA sentences", sentence_count);
         } else if (ret == ESP_OK && bytes_read == 0) {
             // No data available - track consecutive zero reads
             consecutive_errors = 0;
