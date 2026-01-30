@@ -436,7 +436,11 @@ static void gps_poll_task(void *pvParameters)
         esp_err_t ret = gps_i2c_read_nmea(nmea_buffer, 11999, &bytes_read);
 
         if (ret == ESP_OK && bytes_read > 0) {
-            consecutive_errors = 0;  // Reset error counter on success
+            // Reset error counter and clear error indicator on success
+            if (consecutive_errors > 0 && error_callback) {
+                error_callback(0, error_callback_user_data);  // 0 = no error, clears indicator
+            }
+            consecutive_errors = 0;
 
             // Log first 60 chars of data for debugging
             char preview[61];
@@ -468,8 +472,8 @@ static void gps_poll_task(void *pvParameters)
             consecutive_errors++;
             ESP_LOGI(TAG, "GPS read error %d: %s", consecutive_errors, esp_err_to_name(ret));
 
-            // Notify error callback
-            if (error_callback) {
+            // Only notify error callback after 3+ consecutive errors (avoid flicker on transient errors)
+            if (error_callback && consecutive_errors >= 3) {
                 error_callback(consecutive_errors, error_callback_user_data);
             }
 

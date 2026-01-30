@@ -14,10 +14,17 @@
 
 static const char *TAG = "GPS";
 
-// GPS error callback - shows error on display
+// GPS error callback - shows/clears error on display
 static void gps_error_callback(int error_count, void *user_data) {
     if (bsp_display_lock(100)) {
-        SimpleMap::show_gps_error();
+        if (error_count == 0) {
+            // Error cleared - restore normal GPS status display
+            // (will be updated on next GPS data callback)
+            SimpleMap::update_gps_status(-1, 0);  // Show "--" temporarily
+        } else {
+            // Show error indicator
+            SimpleMap::show_gps_error();
+        }
         bsp_display_unlock();
     }
 }
