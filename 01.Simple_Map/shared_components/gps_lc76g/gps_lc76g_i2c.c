@@ -448,7 +448,10 @@ static void gps_poll_task(void *pvParameters)
             ESP_LOGI(TAG, "GPS read error %d: %s", consecutive_errors, esp_err_to_name(ret));
 
             if (consecutive_errors >= 5) {
-                ESP_LOGW(TAG, "Persistent GPS errors, recreating device handles...");
+                ESP_LOGW(TAG, "Persistent GPS errors, waiting 3s then recreating device handles...");
+
+                // Wait before recovery to let driver clean up
+                vTaskDelay(pdMS_TO_TICKS(3000));
 
                 // Take mutex before recovery
                 if (i2c_mutex) xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(1000));
@@ -463,11 +466,11 @@ static void gps_poll_task(void *pvParameters)
                     i2c_dev_write = NULL;
                 }
 
-                vTaskDelay(pdMS_TO_TICKS(100));
+                vTaskDelay(pdMS_TO_TICKS(500));
 
                 // Reset bus
                 i2c_master_bus_reset(i2c_bus_handle);
-                vTaskDelay(pdMS_TO_TICKS(200));
+                vTaskDelay(pdMS_TO_TICKS(500));
 
                 // Recreate write device
                 i2c_device_config_t dev_cfg_write = {
