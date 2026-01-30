@@ -483,9 +483,31 @@ static void gps_poll_task(void *pvParameters)
                 data_callback(&stale_data, data_callback_user_data);
             }
 
-            // After 30 consecutive zero reads (30 seconds), GPS module may be stuck - try full recovery
+            // After 10 consecutive zero reads, try LC76G-specific recovery
+            // Per Quectel forum: writing anything to device can wake it up
+            if (consecutive_zero_reads == 10) {
+                ESP_LOGW(TAG, "GPS module not responding (10 zero reads), trying wake-up write...");
+
+                if (i2c_mutex) xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(1000));
+
+                // Try writing init command to wake up the module
+                uint8_t wake_cmd[] = {0x08, 0x00, 0x51, 0xAA, 0x04, 0x00, 0x00, 0x00};
+                esp_err_t wake_ret = i2c_master_transmit(i2c_dev_write, wake_cmd, sizeof(wake_cmd), pdMS_TO_TICKS(500));
+                ESP_LOGI(TAG, "Wake-up write result: %s", esp_err_to_name(wake_ret));
+
+                vTaskDelay(pdMS_TO_TICKS(200));
+
+                // Per Quectel forum: reading 1 byte from 0x54 can reset stuck transaction
+                uint8_t dummy;
+                i2c_master_receive(i2c_dev_read, &dummy, 1, pdMS_TO_TICKS(100));
+                ESP_LOGI(TAG, "Recovery read complete");
+
+                if (i2c_mutex) xSemaphoreGive(i2c_mutex);
+            }
+
+            // After 30 consecutive zero reads, try full I2C recovery
             if (consecutive_zero_reads == 30) {
-                ESP_LOGW(TAG, "GPS module not responding (30 zero reads), performing full I2C recovery...");
+                ESP_LOGW(TAG, "GPS module still not responding (30 zero reads), performing full I2C recovery...");
 
                 // Take mutex before recovery
                 if (i2c_mutex) xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(1000));
