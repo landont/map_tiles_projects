@@ -9,8 +9,13 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "driver/i2c_master.h"
+#include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+
+// I2C pins (must match BSP)
+#define I2C_SDA_PIN  GPIO_NUM_15
+#define I2C_SCL_PIN  GPIO_NUM_14
 
 static const char *TAG = "GPS_LC76G_I2C";
 
@@ -295,6 +300,45 @@ static void parse_nmea_sentence(const char *sentence)
     }
 }
 
+// Manual I2C bus recovery - clock SCL to release stuck slaves
+static void i2c_bus_recovery(void)
+{
+    ESP_LOGW(TAG, "Performing manual I2C bus recovery...");
+
+    // Temporarily configure pins as GPIO
+    gpio_config_t io_conf = {
+        .pin_bit_mask = (1ULL << I2C_SCL_PIN) | (1ULL << I2C_SDA_PIN),
+        .mode = GPIO_MODE_INPUT_OUTPUT_OD,  // Open-drain
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    gpio_config(&io_conf);
+
+    // Release SDA and SCL
+    gpio_set_level(I2C_SDA_PIN, 1);
+    gpio_set_level(I2C_SCL_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    // Clock SCL 9 times to release any stuck slave
+    for (int i = 0; i < 9; i++) {
+        gpio_set_level(I2C_SCL_PIN, 0);
+        vTaskDelay(pdMS_TO_TICKS(1));
+        gpio_set_level(I2C_SCL_PIN, 1);
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    // Generate STOP condition
+    gpio_set_level(I2C_SDA_PIN, 0);
+    vTaskDelay(pdMS_TO_TICKS(1));
+    gpio_set_level(I2C_SCL_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(1));
+    gpio_set_level(I2C_SDA_PIN, 1);
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    ESP_LOGI(TAG, "I2C bus recovery complete");
+}
+
 // Read NMEA data from LC76G via I2C
 static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *bytes_read)
 {
@@ -448,10 +492,7 @@ static void gps_poll_task(void *pvParameters)
             ESP_LOGI(TAG, "GPS read error %d: %s", consecutive_errors, esp_err_to_name(ret));
 
             if (consecutive_errors >= 5) {
-                ESP_LOGW(TAG, "Persistent GPS errors, waiting 3s then recreating device handles...");
-
-                // Wait before recovery to let driver clean up
-                vTaskDelay(pdMS_TO_TICKS(3000));
+                ESP_LOGW(TAG, "Persistent GPS errors, performing full I2C recovery...");
 
                 // Take mutex before recovery
                 if (i2c_mutex) xSemaphoreTake(i2c_mutex, pdMS_TO_TICKS(1000));
@@ -466,10 +507,14 @@ static void gps_poll_task(void *pvParameters)
                     i2c_dev_write = NULL;
                 }
 
-                vTaskDelay(pdMS_TO_TICKS(500));
+                vTaskDelay(pdMS_TO_TICKS(100));
 
-                // Reset bus
+                // Reset bus via driver
                 i2c_master_bus_reset(i2c_bus_handle);
+                vTaskDelay(pdMS_TO_TICKS(100));
+
+                // Manual I2C bus recovery to unstick any slaves
+                i2c_bus_recovery();
                 vTaskDelay(pdMS_TO_TICKS(500));
 
                 // Recreate write device
