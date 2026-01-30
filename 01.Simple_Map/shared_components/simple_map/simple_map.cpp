@@ -458,13 +458,16 @@ void SimpleMap::update_gps_marker_position() {
 }
 
 void SimpleMap::check_auto_center() {
-    if (!user_scrolled || !gps_has_fix) return;
+    // Only auto-center if user has scrolled and we have GPS fix
+    if (!user_scrolled) return;
+    if (!gps_has_fix) return;
 
     uint32_t current_time = esp_timer_get_time() / 1000;
     uint32_t idle_time = current_time - last_user_scroll_time;
 
     if (idle_time >= AUTO_CENTER_TIMEOUT_MS) {
-        printf("SimpleMap: Auto-centering on GPS after %lu ms of inactivity\n", idle_time);
+        printf("SimpleMap: Auto-centering on GPS (%.6f, %.6f) after %lu ms of inactivity\n",
+               gps_lat, gps_lon, idle_time);
 
         // Update map center to GPS position
         current_lat = gps_lat;
@@ -911,8 +914,20 @@ void SimpleMap::change_zoom_level(int new_zoom) {
     // Update current zoom after setting it in the component
     current_zoom = new_zoom;
 
-    // Recalculate tile positions for the new zoom level centered on current GPS coordinates
-    map_tiles_set_center_from_gps(map_handle, current_lat, current_lon);
+    // If we have GPS fix, center on GPS position; otherwise use current map center
+    double center_lat = current_lat;
+    double center_lon = current_lon;
+    if (gps_has_fix) {
+        center_lat = gps_lat;
+        center_lon = gps_lon;
+        current_lat = gps_lat;
+        current_lon = gps_lon;
+        user_scrolled = false;  // Reset scroll flag when zooming with GPS fix
+        printf("SimpleMap: Zoom centering on GPS position (%.6f, %.6f)\n", gps_lat, gps_lon);
+    }
+
+    // Recalculate tile positions for the new zoom level
+    map_tiles_set_center_from_gps(map_handle, center_lat, center_lon);
 
     // Force reload all tiles for the new zoom level
     load_map_tiles();
@@ -921,6 +936,7 @@ void SimpleMap::change_zoom_level(int new_zoom) {
     lv_timer_create([](lv_timer_t *t) {
         lv_timer_del(t);
         center_map_on_gps();
+        update_gps_marker_position();
         update_zoom_buttons_visibility();
         printf("SimpleMap: Zoom change completed, map centered at zoom level %d\n", current_zoom);
     }, 200, NULL);
