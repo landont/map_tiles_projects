@@ -304,7 +304,7 @@ void SimpleMap::create_gps_indicator(lv_obj_t* parent_screen) {
 }
 
 void SimpleMap::create_direction_arrow() {
-    // Create container for direction arrow (24x24 to allow for rotation)
+    // Create container for direction triangle (24x24)
     gps_marker = lv_obj_create(map_group);
     lv_obj_set_size(gps_marker, 24, 24);
     lv_obj_set_style_bg_opa(gps_marker, LV_OPA_TRANSP, 0);
@@ -313,37 +313,50 @@ void SimpleMap::create_direction_arrow() {
     lv_obj_clear_flag(gps_marker, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(gps_marker, LV_OBJ_FLAG_HIDDEN);
 
-    // Create arrow body (vertical line pointing up)
-    lv_obj_t* arrow_body = lv_obj_create(gps_marker);
-    lv_obj_set_size(arrow_body, 4, 16);
-    lv_obj_set_pos(arrow_body, 10, 6);  // Centered horizontally, bottom half
-    lv_obj_set_style_bg_color(arrow_body, lv_color_make(255, 50, 50), 0);  // Red
-    lv_obj_set_style_bg_opa(arrow_body, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(arrow_body, 0, 0);
-    lv_obj_set_style_radius(arrow_body, 0, 0);
-    lv_obj_clear_flag(arrow_body, LV_OBJ_FLAG_SCROLLABLE);
+    lv_color_t red = lv_color_make(255, 50, 50);
 
-    // Create arrow head (left wing)
-    lv_obj_t* arrow_left = lv_obj_create(gps_marker);
-    lv_obj_set_size(arrow_left, 4, 8);
-    lv_obj_set_pos(arrow_left, 4, 4);
-    lv_obj_set_style_bg_color(arrow_left, lv_color_make(255, 50, 50), 0);  // Red
-    lv_obj_set_style_bg_opa(arrow_left, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(arrow_left, 0, 0);
-    lv_obj_set_style_radius(arrow_left, 0, 0);
-    lv_obj_set_style_transform_rotation(arrow_left, 450, 0);  // 45 degrees
-    lv_obj_clear_flag(arrow_left, LV_OBJ_FLAG_SCROLLABLE);
+    // Create a simple filled triangle using stacked trapezoids
+    // Narrow triangle pointing up: ~18px tall, ~8px base
 
-    // Create arrow head (right wing)
-    lv_obj_t* arrow_right = lv_obj_create(gps_marker);
-    lv_obj_set_size(arrow_right, 4, 8);
-    lv_obj_set_pos(arrow_right, 16, 4);
-    lv_obj_set_style_bg_color(arrow_right, lv_color_make(255, 50, 50), 0);  // Red
-    lv_obj_set_style_bg_opa(arrow_right, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(arrow_right, 0, 0);
-    lv_obj_set_style_radius(arrow_right, 0, 0);
-    lv_obj_set_style_transform_rotation(arrow_right, -450, 0);  // -45 degrees
-    lv_obj_clear_flag(arrow_right, LV_OBJ_FLAG_SCROLLABLE);
+    // Bottom section (widest) - 4px tall, 8px wide
+    lv_obj_t* bottom = lv_obj_create(gps_marker);
+    lv_obj_set_size(bottom, 8, 4);
+    lv_obj_set_pos(bottom, 8, 17);
+    lv_obj_set_style_bg_color(bottom, red, 0);
+    lv_obj_set_style_bg_opa(bottom, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(bottom, 0, 0);
+    lv_obj_set_style_radius(bottom, 0, 0);
+    lv_obj_clear_flag(bottom, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Middle-bottom section - 4px tall, 6px wide
+    lv_obj_t* mid_bot = lv_obj_create(gps_marker);
+    lv_obj_set_size(mid_bot, 6, 4);
+    lv_obj_set_pos(mid_bot, 9, 13);
+    lv_obj_set_style_bg_color(mid_bot, red, 0);
+    lv_obj_set_style_bg_opa(mid_bot, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(mid_bot, 0, 0);
+    lv_obj_set_style_radius(mid_bot, 0, 0);
+    lv_obj_clear_flag(mid_bot, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Middle-top section - 4px tall, 4px wide
+    lv_obj_t* mid_top = lv_obj_create(gps_marker);
+    lv_obj_set_size(mid_top, 4, 4);
+    lv_obj_set_pos(mid_top, 10, 9);
+    lv_obj_set_style_bg_color(mid_top, red, 0);
+    lv_obj_set_style_bg_opa(mid_top, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(mid_top, 0, 0);
+    lv_obj_set_style_radius(mid_top, 0, 0);
+    lv_obj_clear_flag(mid_top, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Top tip section - 5px tall, 2px wide
+    lv_obj_t* tip = lv_obj_create(gps_marker);
+    lv_obj_set_size(tip, 2, 5);
+    lv_obj_set_pos(tip, 11, 4);
+    lv_obj_set_style_bg_color(tip, red, 0);
+    lv_obj_set_style_bg_opa(tip, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_width(tip, 0, 0);
+    lv_obj_set_style_radius(tip, 0, 0);
+    lv_obj_clear_flag(tip, LV_OBJ_FLAG_SCROLLABLE);
 
     // Set transform pivot point to center of marker for rotation
     lv_obj_set_style_transform_pivot_x(gps_marker, 12, 0);
