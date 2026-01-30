@@ -342,7 +342,7 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
     uint8_t init_cmd[] = {0x08, 0x00, 0x51, 0xAA, 0x04, 0x00, 0x00, 0x00};
     ret = i2c_master_transmit(i2c_dev_write, init_cmd, sizeof(init_cmd), pdMS_TO_TICKS(500));
     if (ret != ESP_OK) {
-        ESP_LOGD(TAG, "Init cmd failed: %s", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "Step 1 (init cmd to 0x50) failed: %s", esp_err_to_name(ret));
         if (i2c_mutex) xSemaphoreGive(i2c_mutex);
         return ret;
     }
@@ -353,7 +353,7 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
     // Step 2: Read data length (4 bytes) from read address (0x54)
     ret = i2c_master_receive(i2c_dev_read, read_length, 4, pdMS_TO_TICKS(500));
     if (ret != ESP_OK) {
-        ESP_LOGD(TAG, "Read length failed: %s", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "Step 2 (read length from 0x54) failed: %s", esp_err_to_name(ret));
         if (i2c_mutex) xSemaphoreGive(i2c_mutex);
         return ret;
     }
@@ -629,12 +629,24 @@ static void gps_poll_task(void *pvParameters)
                     ESP_LOGE(TAG, "Failed to recreate read device: %s", esp_err_to_name(add_ret));
                 }
 
-                vTaskDelay(pdMS_TO_TICKS(200));
+                // Longer delay to let I2C bus stabilize
+                vTaskDelay(pdMS_TO_TICKS(500));
+
+                // Probe to verify device is responsive
+                esp_err_t probe_ret = i2c_master_probe(i2c_bus_handle, GPS_I2C_ADDR_WRITE, pdMS_TO_TICKS(100));
+                if (probe_ret == ESP_OK) {
+                    ESP_LOGI(TAG, "GPS device probe successful after recovery");
+                } else {
+                    ESP_LOGW(TAG, "GPS device probe failed after recovery: %s", esp_err_to_name(probe_ret));
+                }
 
                 if (i2c_mutex) xSemaphoreGive(i2c_mutex);
 
                 consecutive_errors = 0;
-                ESP_LOGI(TAG, "GPS recovery complete");
+                ESP_LOGI(TAG, "GPS recovery complete, waiting 2s before resuming...");
+
+                // Extra delay before resuming normal polling
+                vTaskDelay(pdMS_TO_TICKS(2000));
             }
         }
 
