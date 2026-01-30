@@ -50,6 +50,10 @@ public:
     // Reset touch time and restore backlight (call on any user interaction)
     static void reset_activity_timer();
 
+    // Try to auto-center map on GPS position (call periodically from battery monitor)
+    // Returns true if map was re-centered
+    static bool try_auto_center_on_gps();
+
     // GPS position tracking
     // Update GPS position from external GPS module
     static void set_gps_position(double latitude, double longitude, bool has_fix);

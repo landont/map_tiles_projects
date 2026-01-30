@@ -130,6 +130,14 @@ static void battery_monitor_task(void *pvParameters)
                 bsp_display_brightness_set(25);
                 backlight_dimmed = true;
                 ESP_LOGI(TAG, "Backlight dimmed to 25%% (idle for %lu ms)", idle_time);
+
+                // Also auto-center map on GPS position when dimming
+                if (bsp_display_lock(100)) {
+                    if (SimpleMap::try_auto_center_on_gps()) {
+                        ESP_LOGI(TAG, "Map auto-centered on GPS position");
+                    }
+                    bsp_display_unlock();
+                }
             } else if (idle_time < BACKLIGHT_DIM_TIMEOUT_MS && backlight_dimmed) {
                 // Touch event restored brightness, reset flag
                 backlight_dimmed = false;

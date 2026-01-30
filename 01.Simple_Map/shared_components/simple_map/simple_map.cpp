@@ -552,6 +552,33 @@ void SimpleMap::reset_activity_timer() {
     bsp_display_brightness_set(100);
 }
 
+bool SimpleMap::try_auto_center_on_gps() {
+    // Only auto-center if user has scrolled away and we have GPS fix
+    if (!user_scrolled || !gps_has_fix) {
+        return false;
+    }
+
+    printf("SimpleMap: Auto-centering on GPS (%.6f, %.6f)\n", gps_lat, gps_lon);
+
+    // Update map center to GPS position
+    current_lat = gps_lat;
+    current_lon = gps_lon;
+
+    // Recenter the map
+    map_tiles_set_center_from_gps(map_handle, gps_lat, gps_lon);
+    load_map_tiles();
+
+    // Center the view after tiles load
+    lv_timer_create([](lv_timer_t *t) {
+        lv_timer_del(t);
+        center_map_on_gps();
+        update_gps_marker_position();
+    }, 200, NULL);
+
+    user_scrolled = false;
+    return true;
+}
+
 void SimpleMap::show_location(double latitude, double longitude, int zoom_level) {
     if (!initialized || !map_handle) return;
 
