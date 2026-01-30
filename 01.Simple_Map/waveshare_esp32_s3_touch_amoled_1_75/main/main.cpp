@@ -104,7 +104,8 @@ extern "C" void app_main(void)
     // Initialize and start battery monitor
     i2c_master_bus_handle_t i2c_handle = bsp_i2c_get_handle();
     if (battery_monitor_init(i2c_handle) == ESP_OK) {
-        battery_monitor_start(5000);  // Update every 5 seconds
+        // DISABLED FOR GPS TESTING - battery_monitor_start(5000);
+        printf("Battery monitor initialized but polling DISABLED for GPS testing\n");
     } else {
         printf("Battery monitor initialization failed (AXP2101 may not be present)\n");
     }
