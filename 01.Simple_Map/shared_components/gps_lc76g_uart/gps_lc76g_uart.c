@@ -554,7 +554,7 @@ esp_err_t gps_uart_start(void)
     BaseType_t result = xTaskCreate(
         gps_uart_task,
         "gps_uart",
-        4096,
+        8192,
         NULL,
         10,
         &gps_task_handle
