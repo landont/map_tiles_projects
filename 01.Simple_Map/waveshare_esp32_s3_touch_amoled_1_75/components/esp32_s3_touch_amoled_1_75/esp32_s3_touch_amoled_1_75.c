@@ -250,7 +250,8 @@ esp_err_t bsp_lc76g_get_nmea(char **nmea_out, size_t *length_out)
         return ESP_FAIL;
     }
 
-    // Wait for bus to be idle before switching to different device address
+    // Reset bus and wait before switching to different device address
+    i2c_master_bus_reset(i2c_handle);
     ret = i2c_master_bus_wait_all_done(i2c_handle, 1000);
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "GPS bus wait after Step 1 failed: %s", esp_err_to_name(ret));
@@ -282,7 +283,8 @@ esp_err_t bsp_lc76g_get_nmea(char **nmea_out, size_t *length_out)
         return ESP_FAIL;
     }
 
-    // Wait for bus to be idle before switching to different device address
+    // Reset bus and wait before switching to different device address
+    i2c_master_bus_reset(i2c_handle);
     ret = i2c_master_bus_wait_all_done(i2c_handle, 1000);
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "GPS bus wait after Step 3 failed: %s", esp_err_to_name(ret));
