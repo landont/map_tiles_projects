@@ -631,6 +631,11 @@ void SimpleMap::prune_old_track_points() {
     if (track_log_count == 0) return;
 
     uint32_t now = esp_timer_get_time() / 1000;
+
+    // Prevent unsigned underflow - if we haven't been running for TRACK_LOG_DURATION_MS yet,
+    // no points can possibly be older than the duration
+    if (now < TRACK_LOG_DURATION_MS) return;
+
     uint32_t cutoff = now - TRACK_LOG_DURATION_MS;
 
     // Remove points older than the duration
