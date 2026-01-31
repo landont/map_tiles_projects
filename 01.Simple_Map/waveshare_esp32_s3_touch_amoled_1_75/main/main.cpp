@@ -71,12 +71,10 @@ extern "C" void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    // NOTE: bsp_i2c_init() uses the new I2C master driver, but bsp_lc76g_get_nmea
-    // uses the legacy i2c_bus component. These can't coexist on the same port.
-    // We skip bsp_i2c_init() here since GPS init will set up the legacy driver.
-    // Battery monitor is disabled as it requires the new driver.
+    // Initialize I2C bus first (new I2C master driver)
+    bsp_i2c_init();
 
-    // Initialize GPS (uses BSP's bsp_lc76g_get_nmea with legacy i2c_bus driver)
+    // Initialize GPS (now uses new I2C master driver, compatible with touch/battery)
     if (gps_i2c_init() == ESP_OK) {
         gps_i2c_register_data_callback(gps_callback, NULL);
         gps_i2c_register_error_callback(gps_error_callback, NULL);
@@ -86,17 +84,13 @@ extern "C" void app_main(void)
         printf("GPS initialization failed\n");
     }
 
-    // Skip bsp_i2c_init() - GPS already initialized I2C with legacy driver
-    // bsp_i2c_init();
-
     esp_err_t err = bsp_sdcard_mount();
     if (err != ESP_OK) {
         printf("Failed to mount SD card, error: %s\n", esp_err_to_name(err));
     }
 
-    // Skip IO expander - it requires new I2C master driver which conflicts with GPS legacy driver
-    // io_expander = bsp_io_expander_init();
-    // GPS reset pin is unknown anyway - EXIO7 is LCD/touch reset, not GPS
+    // Initialize IO expander (now works since GPS uses new I2C driver)
+    io_expander = bsp_io_expander_init();
 
     // Reset touch controller via GPIO 40
     gpio_config_t io_conf = {
@@ -129,10 +123,6 @@ extern "C" void app_main(void)
 
     bsp_display_unlock();
 
-    // TODO: Battery monitor disabled - requires new I2C driver which conflicts with GPS
-    // The GPS uses BSP's bsp_lc76g_get_nmea which uses the legacy i2c_bus driver.
-    // To re-enable battery monitor, need to either:
-    // 1. Update battery monitor to use legacy i2c_bus driver, or
-    // 2. Rewrite GPS to use new I2C master driver (had issues with dual-address)
-    printf("Battery monitor disabled (I2C driver conflict with GPS)\n");
+    // Initialize battery monitor (now works since GPS uses new I2C driver)
+    battery_monitor_init(bsp_i2c_get_handle());
 }

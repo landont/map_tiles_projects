@@ -21,7 +21,7 @@
 #include "bsp_err_check.h"
 #include "bsp/display.h"
 #include "bsp/touch.h"
-#include "i2c_bus.h"
+#include "driver/i2c_master.h"
 #include <string.h>
 
 static const char *TAG = "ESP32-S3-Touch-AMOLED-1.75";
@@ -102,15 +102,7 @@ esp_err_t bsp_i2c_init(void)
         .flags.enable_internal_pullup = true,
         .trans_queue_depth = 0,
     };
-    esp_err_t ret = i2c_new_master_bus(&i2c_bus_conf, &i2c_handle);
-    if (ret == ESP_ERR_INVALID_STATE) {
-        // I2C bus already initialized by legacy driver (e.g., bsp_lc76g_get_nmea)
-        // Mark as initialized but note that new driver functions won't work
-        ESP_LOGW(TAG, "I2C bus already claimed by legacy driver, skipping new driver init");
-        i2c_initialized = true;
-        return ESP_OK;
-    }
-    BSP_ERROR_CHECK_RETURN_ERR(ret);
+    BSP_ERROR_CHECK_RETURN_ERR(i2c_new_master_bus(&i2c_bus_conf, &i2c_handle));
 
     i2c_initialized = true;
 
@@ -209,52 +201,60 @@ esp_err_t bsp_sdcard_unmount(void)
 
 esp_err_t bsp_lc76g_get_nmea(char **nmea_out, size_t *length_out)
 {
-    static i2c_bus_handle_t bus_handle = NULL;
-    static i2c_bus_device_handle_t write_dev_handle = NULL;
-    static i2c_bus_device_handle_t read_dev_handle = NULL;
+    static i2c_master_dev_handle_t write_dev_handle = NULL;
+    static i2c_master_dev_handle_t read_dev_handle = NULL;
     static bool lc76g_inited = false;
     uint8_t readData[4] = {0};
 
+    // Ensure I2C is initialized (uses new I2C master driver)
+    esp_err_t ret = bsp_i2c_init();
+    if (ret != ESP_OK) {
+        return ret;
+    }
+
     if (!lc76g_inited) {
-        i2c_config_t i2c_conf = {
-            .mode = I2C_MODE_MASTER,
-            .sda_io_num = BSP_I2C_SDA,
-            .scl_io_num = BSP_I2C_SCL,
-            .sda_pullup_en = GPIO_PULLUP_ENABLE,
-            .scl_pullup_en = GPIO_PULLUP_ENABLE,
-            .master.clk_speed = CONFIG_BSP_I2C_CLK_SPEED_HZ
+        // Create device handle for write address (0x50)
+        i2c_device_config_t write_dev_cfg = {
+            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+            .device_address = 0x50,
+            .scl_speed_hz = CONFIG_BSP_I2C_CLK_SPEED_HZ,
         };
-
-        bus_handle = i2c_bus_create(I2C_NUM_1, &i2c_conf);
-        if (!bus_handle) {
-            return ESP_ERR_NO_MEM;
+        ret = i2c_master_bus_add_device(i2c_handle, &write_dev_cfg, &write_dev_handle);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to add GPS write device: %s", esp_err_to_name(ret));
+            return ret;
         }
 
-        write_dev_handle = i2c_bus_device_create(bus_handle, 0x50, CONFIG_BSP_I2C_CLK_SPEED_HZ);
-        if (!write_dev_handle) {
-            i2c_bus_delete(&bus_handle);
-            return ESP_ERR_NO_MEM;
-        }
-
-        read_dev_handle = i2c_bus_device_create(bus_handle, 0x54, CONFIG_BSP_I2C_CLK_SPEED_HZ);
-        if (!read_dev_handle) {
-            i2c_bus_device_delete(&write_dev_handle);
-            i2c_bus_delete(&bus_handle);
-            return ESP_ERR_NO_MEM;
+        // Create device handle for read address (0x54)
+        i2c_device_config_t read_dev_cfg = {
+            .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+            .device_address = 0x54,
+            .scl_speed_hz = CONFIG_BSP_I2C_CLK_SPEED_HZ,
+        };
+        ret = i2c_master_bus_add_device(i2c_handle, &read_dev_cfg, &read_dev_handle);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to add GPS read device: %s", esp_err_to_name(ret));
+            i2c_master_bus_rm_device(write_dev_handle);
+            return ret;
         }
 
         lc76g_inited = true;
+        ESP_LOGI(TAG, "LC76G GPS initialized with new I2C master driver");
     }
 
+    // Step 1: Send query command to 0x50
     uint8_t init_cmd[] = {0x08, 0x00, 0x51, 0xAA, 0x04, 0x00, 0x00, 0x00};
-    esp_err_t ret = i2c_bus_write_bytes(write_dev_handle, NULL_I2C_MEM_ADDR, sizeof(init_cmd), init_cmd);
+    ret = i2c_master_transmit(write_dev_handle, init_cmd, sizeof(init_cmd), 100);
     if (ret != ESP_OK) {
+        ESP_LOGD(TAG, "GPS query command failed: %s", esp_err_to_name(ret));
         return ESP_FAIL;
     }
     vTaskDelay(pdMS_TO_TICKS(100));
 
-    ret = i2c_bus_read_bytes(read_dev_handle, NULL_I2C_MEM_ADDR, sizeof(readData), readData);
+    // Step 2: Read length from 0x54
+    ret = i2c_master_receive(read_dev_handle, readData, sizeof(readData), 100);
     if (ret != ESP_OK) {
+        ESP_LOGD(TAG, "GPS read length failed: %s", esp_err_to_name(ret));
         return ESP_FAIL;
     }
     uint32_t dataLength = (readData[0]) | (readData[1] << 8) |
@@ -264,24 +264,28 @@ esp_err_t bsp_lc76g_get_nmea(char **nmea_out, size_t *length_out)
         return ESP_ERR_NOT_FOUND;
     }
 
+    // Step 3: Send read data command to 0x50
     uint8_t header[] = {0x00, 0x20, 0x51, 0xAA};
     uint8_t send_buf[sizeof(header) + sizeof(readData)];
     memcpy(send_buf, header, sizeof(header));
     memcpy(send_buf + sizeof(header), readData, sizeof(readData));
     vTaskDelay(pdMS_TO_TICKS(100));
-    ret = i2c_bus_write_bytes(write_dev_handle, NULL_I2C_MEM_ADDR, sizeof(send_buf), send_buf);
+    ret = i2c_master_transmit(write_dev_handle, send_buf, sizeof(send_buf), 100);
     if (ret != ESP_OK) {
+        ESP_LOGD(TAG, "GPS read data command failed: %s", esp_err_to_name(ret));
         return ESP_FAIL;
     }
 
+    // Step 4: Read NMEA data from 0x54
     uint8_t *dynamicReadData = malloc(dataLength);
     if (!dynamicReadData) {
         return ESP_ERR_NO_MEM;
     }
     vTaskDelay(pdMS_TO_TICKS(100));
-    
-    ret = i2c_bus_read_bytes(read_dev_handle, NULL_I2C_MEM_ADDR, dataLength, dynamicReadData);
+
+    ret = i2c_master_receive(read_dev_handle, dynamicReadData, dataLength, 100);
     if (ret != ESP_OK) {
+        ESP_LOGD(TAG, "GPS read NMEA data failed: %s", esp_err_to_name(ret));
         free(dynamicReadData);
         return ret;
     }
