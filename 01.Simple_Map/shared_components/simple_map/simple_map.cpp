@@ -313,7 +313,7 @@ void SimpleMap::create_gps_indicator(lv_obj_t* parent_screen) {
 void SimpleMap::create_speed_indicator(lv_obj_t* parent_screen) {
     // Create speed/pace container at bottom center
     speed_container = lv_obj_create(parent_screen);
-    lv_obj_set_size(speed_container, 190, 24);
+    lv_obj_set_size(speed_container, 170, 24);
     lv_obj_set_style_bg_color(speed_container, lv_color_make(0, 0, 0), 0);
     lv_obj_set_style_bg_opa(speed_container, LV_OPA_60, 0);
     lv_obj_set_style_border_width(speed_container, 1, 0);
@@ -331,7 +331,7 @@ void SimpleMap::create_speed_indicator(lv_obj_t* parent_screen) {
 
     // Speed label on left side
     speed_label = lv_label_create(speed_container);
-    lv_label_set_text(speed_label, "-- km/h");
+    lv_label_set_text(speed_label, "  -- km/h");
     lv_obj_set_style_text_color(speed_label, lv_color_white(), 0);
     lv_obj_set_style_text_font(speed_label, &lv_font_montserrat_14, 0);
     lv_obj_align(speed_label, LV_ALIGN_LEFT_MID, 0, 0);
@@ -351,11 +351,11 @@ void SimpleMap::update_speed_indicator(float speed_kmh) {
 
     // Update speed label
     if (speed_kmh < 0.5f) {
-        lv_label_set_text(speed_label, "-- km/h");
+        lv_label_set_text(speed_label, "  -- km/h");
         lv_label_set_text(pace_label, "--:--/mi");
     } else {
         // Format speed
-        lv_label_set_text_fmt(speed_label, "%.1f km/h", speed_kmh);
+        lv_label_set_text_fmt(speed_label, "  %.1f km/h", speed_kmh);
 
         // Calculate pace in minutes per mile
         // speed_kmh to speed_mph: divide by 1.60934
