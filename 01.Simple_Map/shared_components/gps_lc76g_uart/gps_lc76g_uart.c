@@ -1,6 +1,7 @@
 /* LC76G GPS module implementation - UART version */
 
 #include "gps_lc76g_uart.h"
+#include "gpx_replay.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,6 +17,8 @@ static const char *TAG = "GPS_LC76G_UART";
 
 #define UART_RX_BUF_SIZE    (1024)
 #define NMEA_MAX_LEN        (256)
+#define GPX_REPLAY_FILE     "/sdcard/tracklog.gpx"
+#define GPX_NO_FIX_TIMEOUT_MS  30000  // Start replay after 30 seconds without fix
 
 static bool gps_initialized = false;
 static gps_data_t current_gps_data = {0};
@@ -330,6 +333,9 @@ static void gps_uart_task(void *pvParameters)
     int consecutive_errors = 0;
     uint32_t last_data_time = 0;
     uint32_t last_status_time = 0;
+    uint32_t task_start_time = esp_timer_get_time() / 1000;
+    bool gpx_replay_checked = false;
+    bool gpx_replay_started = false;
 
     ESP_LOGI(TAG, "GPS UART task started");
 
@@ -339,6 +345,13 @@ static void gps_uart_task(void *pvParameters)
         if (len > 0) {
             consecutive_errors = 0;
             last_data_time = esp_timer_get_time() / 1000;
+
+            // If we get real GPS data and replay is active, stop replay
+            if (gpx_replay_started && current_gps_data.valid) {
+                ESP_LOGI(TAG, "Real GPS fix acquired, stopping GPX replay");
+                gpx_replay_stop();
+                gpx_replay_started = false;
+            }
 
             if (rx_byte == '$') {
                 // Start of new NMEA sentence
@@ -363,11 +376,32 @@ static void gps_uart_task(void *pvParameters)
             // Periodic status update every 30 seconds
             if (now - last_status_time >= 30000) {
                 last_status_time = now;
-                ESP_LOGI(TAG, "Fix: %s | Type: %d | Sats used: %d | Sats visible: %d",
-                         current_gps_data.valid ? "YES" : "NO",
-                         current_gps_data.fix_type,
-                         current_gps_data.satellites_used,
-                         current_gps_data.satellites_visible);
+                if (gpx_replay_started) {
+                    ESP_LOGI(TAG, "GPX Replay active");
+                } else {
+                    ESP_LOGI(TAG, "Fix: %s | Type: %d | Sats used: %d | Sats visible: %d",
+                             current_gps_data.valid ? "YES" : "NO",
+                             current_gps_data.fix_type,
+                             current_gps_data.satellites_used,
+                             current_gps_data.satellites_visible);
+                }
+            }
+
+            // Check for GPX replay after timeout with no fix
+            if (!gpx_replay_checked && !current_gps_data.valid &&
+                (now - task_start_time) >= GPX_NO_FIX_TIMEOUT_MS) {
+                gpx_replay_checked = true;
+
+                // Try to load GPX file
+                if (gpx_replay_init(GPX_REPLAY_FILE) == ESP_OK) {
+                    ESP_LOGI(TAG, "No GPS fix after %d seconds, starting GPX replay",
+                             GPX_NO_FIX_TIMEOUT_MS / 1000);
+                    if (gpx_replay_start(data_callback, data_callback_user_data) == ESP_OK) {
+                        gpx_replay_started = true;
+                    }
+                } else {
+                    ESP_LOGI(TAG, "No GPX file found at %s", GPX_REPLAY_FILE);
+                }
             }
 
             if (last_data_time > 0 && (now - last_data_time) > 5000) {
@@ -376,8 +410,8 @@ static void gps_uart_task(void *pvParameters)
                     consecutive_errors = 1;
                     ESP_LOGW(TAG, "No GPS data for 5 seconds - connection may be lost");
 
-                    // Notify with invalid data
-                    if (data_callback) {
+                    // Notify with invalid data (only if not replaying)
+                    if (data_callback && !gpx_replay_started) {
                         gps_data_t stale_data = {0};
                         stale_data.valid = false;
                         data_callback(&stale_data, data_callback_user_data);
