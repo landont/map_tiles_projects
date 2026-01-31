@@ -102,7 +102,15 @@ esp_err_t bsp_i2c_init(void)
         .flags.enable_internal_pullup = true,
         .trans_queue_depth = 0,
     };
-    BSP_ERROR_CHECK_RETURN_ERR(i2c_new_master_bus(&i2c_bus_conf, &i2c_handle));
+    esp_err_t ret = i2c_new_master_bus(&i2c_bus_conf, &i2c_handle);
+    if (ret == ESP_ERR_INVALID_STATE) {
+        // I2C bus already initialized by legacy driver (e.g., bsp_lc76g_get_nmea)
+        // Mark as initialized but note that new driver functions won't work
+        ESP_LOGW(TAG, "I2C bus already claimed by legacy driver, skipping new driver init");
+        i2c_initialized = true;
+        return ESP_OK;
+    }
+    BSP_ERROR_CHECK_RETURN_ERR(ret);
 
     i2c_initialized = true;
 
