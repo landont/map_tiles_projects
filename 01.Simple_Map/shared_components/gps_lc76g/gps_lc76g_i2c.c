@@ -320,11 +320,16 @@ static void parse_nmea_sentence(const char *sentence)
     }
 }
 
+// Maximum retry attempts for I2C operations (per Quectel example)
+#define MAX_I2C_RETRIES 20
+
 // Read NMEA data from LC76G via I2C
+// Protocol based on Quectel LC76G I2C Application Note
 static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *bytes_read)
 {
     esp_err_t ret;
-    uint8_t read_length[4] = {0};
+    uint8_t length_bytes[4] = {0};
+    int retry_count;
 
     *bytes_read = 0;
 
@@ -339,41 +344,56 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
         return ESP_ERR_TIMEOUT;
     }
 
-    // Small delay to ensure I2C bus is idle
-    vTaskDelay(pdMS_TO_TICKS(10));
+    // Step 1a: Send command to read TX length register
+    // Command format: (QUECTEL_I2C_SLAVE_CR_CMD << 16) | TX_LEN_REG_OFFSET, then length
+    // 0xAA51 << 16 | 0x08 = 0xAA510008, length = 4
+    // Little-endian: 08 00 51 AA 04 00 00 00
+    uint8_t cmd_read_len[] = {0x08, 0x00, 0x51, 0xAA, 0x04, 0x00, 0x00, 0x00};
 
-    // Step 1: Send init command to write address (0x50)
-    uint8_t init_cmd[] = {0x08, 0x00, 0x51, 0xAA, 0x04, 0x00, 0x00, 0x00};
-    ret = i2c_master_transmit(i2c_dev_write, init_cmd, sizeof(init_cmd), pdMS_TO_TICKS(500));
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Step 1 (init cmd to 0x50) failed: %s", esp_err_to_name(ret));
-        if (i2c_mutex) xSemaphoreGive(i2c_mutex);
-        return ret;
+    retry_count = 0;
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(10));  // 10ms delay before each attempt (per Quectel)
+        ret = i2c_master_transmit(i2c_dev_write, cmd_read_len, sizeof(cmd_read_len), pdMS_TO_TICKS(100));
+        if (ret == ESP_OK) {
+            break;
+        }
+        retry_count++;
+        if (retry_count > MAX_I2C_RETRIES) {
+            ESP_LOGW(TAG, "Step 1a failed after %d retries: %s", retry_count, esp_err_to_name(ret));
+            if (i2c_mutex) xSemaphoreGive(i2c_mutex);
+            return ret;
+        }
     }
 
-    // Allow GPS module time to process init command
-    vTaskDelay(pdMS_TO_TICKS(100));
-
-    // Step 2: Read data length (4 bytes) from read address (0x54)
-    ret = i2c_master_receive(i2c_dev_read, read_length, 4, pdMS_TO_TICKS(500));
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Step 2 (read length from 0x54) failed: %s", esp_err_to_name(ret));
-        if (i2c_mutex) xSemaphoreGive(i2c_mutex);
-        return ret;
+    // Step 1b: Read the 4-byte length from read address (0x54)
+    retry_count = 0;
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+        ret = i2c_master_receive(i2c_dev_read, length_bytes, 4, pdMS_TO_TICKS(100));
+        if (ret == ESP_OK) {
+            break;
+        }
+        retry_count++;
+        if (retry_count > MAX_I2C_RETRIES) {
+            ESP_LOGW(TAG, "Step 1b failed after %d retries: %s", retry_count, esp_err_to_name(ret));
+            if (i2c_mutex) xSemaphoreGive(i2c_mutex);
+            return ret;
+        }
     }
 
-    uint32_t data_len = read_length[0] | (read_length[1] << 8) | (read_length[2] << 16) | (read_length[3] << 24);
-    ESP_LOGD(TAG, "Read length bytes: %02X %02X %02X %02X = %lu",
-             read_length[0], read_length[1], read_length[2], read_length[3], data_len);
+    uint32_t data_len = length_bytes[0] | (length_bytes[1] << 8) |
+                        (length_bytes[2] << 16) | (length_bytes[3] << 24);
+
+    ESP_LOGD(TAG, "Length bytes: %02X %02X %02X %02X = %lu",
+             length_bytes[0], length_bytes[1], length_bytes[2], length_bytes[3], data_len);
 
     if (data_len == 0) {
-        // No data available yet
         if (i2c_mutex) xSemaphoreGive(i2c_mutex);
-        return ESP_OK;
+        return ESP_OK;  // No data available
     }
 
     if (data_len > 10000) {
-        ESP_LOGW(TAG, "Invalid data length: %lu (too large)", data_len);
+        ESP_LOGW(TAG, "Invalid data length: %lu", data_len);
         if (i2c_mutex) xSemaphoreGive(i2c_mutex);
         return ESP_OK;
     }
@@ -382,43 +402,50 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
         data_len = buffer_size - 1;
     }
 
-    ESP_LOGD(TAG, "GPS data available: %lu bytes", data_len);
+    // Step 2a: Send command to read TX buffer
+    // Command: (0xAA51 << 16) | 0x2000, length = data_len
+    // Little-endian: 00 20 51 AA [len bytes]
+    uint8_t cmd_read_data[8];
+    cmd_read_data[0] = 0x00;
+    cmd_read_data[1] = 0x20;
+    cmd_read_data[2] = 0x51;
+    cmd_read_data[3] = 0xAA;
+    memcpy(&cmd_read_data[4], length_bytes, 4);
 
-    // Step 3: Send read command with length to write address (0x50)
-    uint8_t read_cmd[8];
-    read_cmd[0] = 0x00;
-    read_cmd[1] = 0x20;
-    read_cmd[2] = 0x51;
-    read_cmd[3] = 0xAA;
-    memcpy(&read_cmd[4], read_length, 4);
-
-    ret = i2c_master_transmit(i2c_dev_write, read_cmd, sizeof(read_cmd), pdMS_TO_TICKS(500));
-    if (ret != ESP_OK) {
-        ESP_LOGD(TAG, "Failed to send read command: %s", esp_err_to_name(ret));
-        if (i2c_mutex) xSemaphoreGive(i2c_mutex);
-        return ret;
+    retry_count = 0;
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+        ret = i2c_master_transmit(i2c_dev_write, cmd_read_data, sizeof(cmd_read_data), pdMS_TO_TICKS(100));
+        if (ret == ESP_OK) {
+            break;
+        }
+        retry_count++;
+        if (retry_count > MAX_I2C_RETRIES) {
+            ESP_LOGW(TAG, "Step 2a failed after %d retries: %s", retry_count, esp_err_to_name(ret));
+            if (i2c_mutex) xSemaphoreGive(i2c_mutex);
+            return ret;
+        }
     }
 
-    // Allow GPS module time to prepare data
-    vTaskDelay(pdMS_TO_TICKS(100));
-
-    // Step 4: Read NMEA data from read address (0x54)
-    ret = i2c_master_receive(i2c_dev_read, (uint8_t *)buffer, data_len, pdMS_TO_TICKS(1000));
-    if (ret != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to read NMEA data (%lu bytes): %s", data_len, esp_err_to_name(ret));
-        if (i2c_mutex) xSemaphoreGive(i2c_mutex);
-        return ret;
+    // Step 2b: Read NMEA data from read address (0x54)
+    retry_count = 0;
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(10));
+        ret = i2c_master_receive(i2c_dev_read, (uint8_t *)buffer, data_len, pdMS_TO_TICKS(1000));
+        if (ret == ESP_OK) {
+            buffer[data_len] = '\0';
+            *bytes_read = data_len;
+            if (i2c_mutex) xSemaphoreGive(i2c_mutex);
+            ESP_LOGD(TAG, "Read %lu bytes of NMEA data", data_len);
+            return ESP_OK;
+        }
+        retry_count++;
+        if (retry_count > MAX_I2C_RETRIES) {
+            ESP_LOGW(TAG, "Step 2b failed after %d retries: %s", retry_count, esp_err_to_name(ret));
+            if (i2c_mutex) xSemaphoreGive(i2c_mutex);
+            return ret;
+        }
     }
-
-    buffer[data_len] = '\0';
-    *bytes_read = data_len;
-
-    // Release mutex before logging
-    if (i2c_mutex) xSemaphoreGive(i2c_mutex);
-
-    ESP_LOGD(TAG, "Successfully read %lu bytes of NMEA data", data_len);
-
-    return ESP_OK;
 }
 
 // GPS polling task
