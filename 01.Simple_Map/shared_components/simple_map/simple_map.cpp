@@ -354,10 +354,10 @@ void SimpleMap::update_speed_indicator(float speed_kmh) {
         lv_label_set_text(speed_label, "  -- km/h");
         lv_label_set_text(pace_label, "--:--/mi");
     } else {
-        // Format speed (LVGL printf doesn't support %f, so format as int.decimal)
-        int speed_whole = (int)speed_kmh;
-        int speed_decimal = (int)((speed_kmh - speed_whole) * 10);
-        lv_label_set_text_fmt(speed_label, "  %d.%d km/h", speed_whole, speed_decimal);
+        // Format speed using sprintf (LVGL printf doesn't support %f)
+        char speed_str[20];
+        sprintf(speed_str, "  %.2f km/h", speed_kmh);
+        lv_label_set_text(speed_label, speed_str);
 
         // Calculate pace in minutes per mile
         // speed_kmh to speed_mph: divide by 1.60934
