@@ -302,15 +302,32 @@ static void gps_uart_task(void *pvParameters)
     uint8_t rx_byte;
     int consecutive_errors = 0;
     uint32_t last_data_time = 0;
+    uint32_t bytes_received = 0;
+    uint32_t sentences_received = 0;
+    uint32_t last_status_time = 0;
+    bool first_byte_received = false;
 
-    ESP_LOGI(TAG, "GPS UART task started");
+    ESP_LOGI(TAG, "========================================");
+    ESP_LOGI(TAG, "GPS UART task started on GPIO%d", GPS_UART_RX_PIN);
+    ESP_LOGI(TAG, "Baud rate: %d", GPS_UART_BAUD);
+    ESP_LOGI(TAG, "Waiting for data from GPS module...");
+    ESP_LOGI(TAG, "(Check resistor connection: GPS TXD -> GPIO%d)", GPS_UART_RX_PIN);
+    ESP_LOGI(TAG, "========================================");
 
     while (1) {
         int len = uart_read_bytes(GPS_UART_NUM, &rx_byte, 1, pdMS_TO_TICKS(100));
 
         if (len > 0) {
+            bytes_received++;
             consecutive_errors = 0;
             last_data_time = esp_timer_get_time() / 1000;
+
+            // Log first byte received
+            if (!first_byte_received) {
+                first_byte_received = true;
+                ESP_LOGI(TAG, "*** FIRST BYTE RECEIVED! GPS connection confirmed ***");
+                ESP_LOGI(TAG, "First byte: 0x%02X ('%c')", rx_byte, (rx_byte >= 32 && rx_byte < 127) ? rx_byte : '?');
+            }
 
             if (rx_byte == '$') {
                 // Start of new NMEA sentence
@@ -321,6 +338,11 @@ static void gps_uart_task(void *pvParameters)
                 if (nmea_idx > 0) {
                     nmea_buffer[nmea_idx] = '\0';
                     if (nmea_buffer[0] == '$') {
+                        sentences_received++;
+                        // Log first 10 sentences and then every 100th sentence
+                        if (sentences_received <= 10 || sentences_received % 100 == 0) {
+                            ESP_LOGI(TAG, "[#%lu] %s", sentences_received, nmea_buffer);
+                        }
                         parse_nmea_sentence(nmea_buffer);
                     }
                     nmea_idx = 0;
@@ -331,11 +353,26 @@ static void gps_uart_task(void *pvParameters)
         } else {
             // No data received - check for timeout
             uint32_t now = esp_timer_get_time() / 1000;
+
+            // Periodic status update every 10 seconds
+            if (now - last_status_time >= 10000) {
+                last_status_time = now;
+                if (bytes_received > 0) {
+                    ESP_LOGI(TAG, "GPS Status: %lu bytes, %lu sentences received | Fix: %s | Sats: %d",
+                             bytes_received, sentences_received,
+                             current_gps_data.valid ? "YES" : "NO",
+                             current_gps_data.satellites_used);
+                } else {
+                    ESP_LOGW(TAG, "GPS Status: NO DATA RECEIVED - Check hardware connection!");
+                    ESP_LOGW(TAG, "  -> Verify resistor from GPS TXD to GPIO%d", GPS_UART_RX_PIN);
+                }
+            }
+
             if (last_data_time > 0 && (now - last_data_time) > 5000) {
                 // No data for 5 seconds
                 if (consecutive_errors == 0) {
                     consecutive_errors = 1;
-                    ESP_LOGW(TAG, "No GPS data for 5 seconds");
+                    ESP_LOGW(TAG, "No GPS data for 5 seconds - connection may be lost");
 
                     // Notify with invalid data
                     if (data_callback) {
