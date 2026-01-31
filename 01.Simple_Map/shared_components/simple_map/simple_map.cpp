@@ -333,14 +333,14 @@ void SimpleMap::create_speed_indicator(lv_obj_t* parent_screen) {
     speed_label = lv_label_create(speed_container);
     lv_label_set_text(speed_label, "-- km/h");
     lv_obj_set_style_text_color(speed_label, lv_color_white(), 0);
-    lv_obj_set_style_text_font(speed_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(speed_label, &lv_font_montserrat_14, 0);
     lv_obj_align(speed_label, LV_ALIGN_LEFT_MID, 2, 0);
 
     // Pace label on right side
     pace_label = lv_label_create(speed_container);
     lv_label_set_text(pace_label, "--:--/mi");
     lv_obj_set_style_text_color(pace_label, lv_color_white(), 0);
-    lv_obj_set_style_text_font(pace_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_font(pace_label, &lv_font_montserrat_14, 0);
     lv_obj_align(pace_label, LV_ALIGN_RIGHT_MID, -2, 0);
 
     printf("SimpleMap: Speed/pace indicator initialized\n");
