@@ -71,10 +71,7 @@ extern "C" void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    // Initialize I2C bus first (new I2C master driver)
-    bsp_i2c_init();
-
-    // Initialize GPS (now uses new I2C master driver, compatible with touch/battery)
+    // Initialize GPS (uses legacy I2C driver, which is also used by touch)
     if (gps_i2c_init() == ESP_OK) {
         gps_i2c_register_data_callback(gps_callback, NULL);
         gps_i2c_register_error_callback(gps_error_callback, NULL);
@@ -89,8 +86,8 @@ extern "C" void app_main(void)
         printf("Failed to mount SD card, error: %s\n", esp_err_to_name(err));
     }
 
-    // Initialize IO expander (now works since GPS uses new I2C driver)
-    io_expander = bsp_io_expander_init();
+    // Skip IO expander - requires new I2C driver which is incompatible with GPS legacy driver
+    // io_expander = bsp_io_expander_init();
 
     // Reset touch controller via GPIO 40
     gpio_config_t io_conf = {
@@ -123,6 +120,7 @@ extern "C" void app_main(void)
 
     bsp_display_unlock();
 
-    // Initialize battery monitor (now works since GPS uses new I2C driver)
-    battery_monitor_init(bsp_i2c_get_handle());
+    // Skip battery monitor - requires new I2C driver which is incompatible with GPS legacy driver
+    // TODO: Modify battery_monitor to use legacy I2C driver (i2c_bus)
+    printf("Battery monitor disabled (I2C driver conflict with GPS)\n");
 }

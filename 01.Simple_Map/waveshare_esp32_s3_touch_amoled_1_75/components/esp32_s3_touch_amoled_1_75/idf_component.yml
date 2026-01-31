@@ -21,3 +21,4 @@ dependencies:
     public: true
   waveshare/esp_lcd_sh8601: "*"
   waveshare/esp_lcd_touch_cst9217: "*"
+  i2c_bus: "*"
