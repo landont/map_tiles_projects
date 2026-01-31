@@ -266,14 +266,23 @@ static void parse_gsv(const char *sentence)
     }
 }
 
+// Diagnostic counters
+static uint32_t checksum_failures = 0;
+static uint32_t valid_sentences = 0;
+
 static void parse_nmea_sentence(const char *sentence)
 {
     ESP_LOGD(TAG, "NMEA: %s", sentence);
 
     if (!nmea_verify_checksum(sentence)) {
-        ESP_LOGW(TAG, "Invalid checksum: %s", sentence);
+        checksum_failures++;
+        if (checksum_failures <= 5) {
+            ESP_LOGW(TAG, "Checksum fail #%lu: %s", checksum_failures, sentence);
+        }
         return;
     }
+
+    valid_sentences++;
 
     if (nmea_callback) {
         nmea_callback(sentence, nmea_callback_user_data);
@@ -358,10 +367,23 @@ static void gps_uart_task(void *pvParameters)
             if (now - last_status_time >= 10000) {
                 last_status_time = now;
                 if (bytes_received > 0) {
-                    ESP_LOGI(TAG, "GPS Status: %lu bytes, %lu sentences received | Fix: %s | Sats: %d",
-                             bytes_received, sentences_received,
+                    ESP_LOGI(TAG, "GPS Status: %lu bytes | %lu NMEA parsed | %lu checksum fails",
+                             bytes_received, sentences_received, checksum_failures);
+                    ESP_LOGI(TAG, "  Fix: %s | Type: %d | Sats used: %d | Sats visible: %d",
                              current_gps_data.valid ? "YES" : "NO",
-                             current_gps_data.satellites_used);
+                             current_gps_data.fix_type,
+                             current_gps_data.satellites_used,
+                             current_gps_data.satellites_visible);
+                    if (current_gps_data.valid) {
+                        ESP_LOGI(TAG, "  Pos: %.6f, %.6f | Alt: %.1fm | HDOP: %.1f",
+                                 current_gps_data.latitude, current_gps_data.longitude,
+                                 current_gps_data.altitude, current_gps_data.hdop);
+                    }
+                    // If we have bytes but no sentences, show raw sample
+                    if (sentences_received == 0 && bytes_received > 50) {
+                        ESP_LOGW(TAG, "  WARNING: Receiving bytes but no valid NMEA sentences!");
+                        ESP_LOGW(TAG, "  Check: baud rate mismatch or signal integrity issues");
+                    }
                 } else {
                     ESP_LOGW(TAG, "GPS Status: NO DATA RECEIVED - Check hardware connection!");
                     ESP_LOGW(TAG, "  -> Verify resistor from GPS TXD to GPIO%d", GPS_UART_RX_PIN);
