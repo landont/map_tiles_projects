@@ -329,6 +329,7 @@ static void gps_uart_task(void *pvParameters)
     uint8_t rx_byte;
     int consecutive_errors = 0;
     uint32_t last_data_time = 0;
+    uint32_t last_status_time = 0;
 
     ESP_LOGI(TAG, "GPS UART task started");
 
@@ -358,6 +359,16 @@ static void gps_uart_task(void *pvParameters)
         } else {
             // No data received - check for timeout
             uint32_t now = esp_timer_get_time() / 1000;
+
+            // Periodic status update every 30 seconds
+            if (now - last_status_time >= 30000) {
+                last_status_time = now;
+                ESP_LOGI(TAG, "Fix: %s | Type: %d | Sats used: %d | Sats visible: %d",
+                         current_gps_data.valid ? "YES" : "NO",
+                         current_gps_data.fix_type,
+                         current_gps_data.satellites_used,
+                         current_gps_data.satellites_visible);
+            }
 
             if (last_data_time > 0 && (now - last_data_time) > 5000) {
                 // No data for 5 seconds
