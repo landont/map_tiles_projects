@@ -28,6 +28,9 @@
 // Legacy I2C bus handle for GPS (shared with touch via BSP_I2C_NUM)
 static i2c_bus_handle_t legacy_i2c_bus = NULL;
 
+// Forward declaration
+static esp_err_t bsp_legacy_i2c_init(void);
+
 static const char *TAG = "ESP32-S3-Touch-AMOLED-1.75";
 
 static i2c_master_bus_handle_t i2c_handle = NULL; // I2C Handle
