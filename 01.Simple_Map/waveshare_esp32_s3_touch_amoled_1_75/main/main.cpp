@@ -71,8 +71,12 @@ extern "C" void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    // Initialize GPS FIRST - it uses i2c_bus component which initializes legacy I2C driver
-    // This must happen before bsp_i2c_init() which uses the new I2C master driver
+    // NOTE: bsp_i2c_init() uses the new I2C master driver, but bsp_lc76g_get_nmea
+    // uses the legacy i2c_bus component. These can't coexist on the same port.
+    // We skip bsp_i2c_init() here since GPS init will set up the legacy driver.
+    // Battery monitor is disabled as it requires the new driver.
+
+    // Initialize GPS (uses BSP's bsp_lc76g_get_nmea with legacy i2c_bus driver)
     if (gps_i2c_init() == ESP_OK) {
         gps_i2c_register_data_callback(gps_callback, NULL);
         gps_i2c_register_error_callback(gps_error_callback, NULL);
@@ -82,7 +86,8 @@ extern "C" void app_main(void)
         printf("GPS initialization failed\n");
     }
 
-    bsp_i2c_init();
+    // Skip bsp_i2c_init() - GPS already initialized I2C with legacy driver
+    // bsp_i2c_init();
 
     esp_err_t err = bsp_sdcard_mount();
     if (err != ESP_OK) {
@@ -129,11 +134,10 @@ extern "C" void app_main(void)
 
     bsp_display_unlock();
 
-    // Initialize battery monitor (uses new I2C master driver via BSP)
-    i2c_master_bus_handle_t i2c_handle = bsp_i2c_get_handle();
-    if (battery_monitor_init(i2c_handle) == ESP_OK) {
-        battery_monitor_start(5000);  // Update every 5 seconds
-    } else {
-        printf("Battery monitor initialization failed (AXP2101 may not be present)\n");
-    }
+    // TODO: Battery monitor disabled - requires new I2C driver which conflicts with GPS
+    // The GPS uses BSP's bsp_lc76g_get_nmea which uses the legacy i2c_bus driver.
+    // To re-enable battery monitor, need to either:
+    // 1. Update battery monitor to use legacy i2c_bus driver, or
+    // 2. Rewrite GPS to use new I2C master driver (had issues with dual-address)
+    printf("Battery monitor disabled (I2C driver conflict with GPS)\n");
 }
