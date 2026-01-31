@@ -249,6 +249,12 @@ esp_err_t bsp_lc76g_get_nmea(char **nmea_out, size_t *length_out)
         ESP_LOGW(TAG, "GPS Step 1 (query cmd to 0x50) failed: %s", esp_err_to_name(ret));
         return ESP_FAIL;
     }
+
+    // Wait for bus to be idle before switching to different device address
+    ret = i2c_master_bus_wait_all_done(i2c_handle, 1000);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "GPS bus wait after Step 1 failed: %s", esp_err_to_name(ret));
+    }
     vTaskDelay(pdMS_TO_TICKS(100));
 
     // Step 2: Read length from 0x54
@@ -274,6 +280,12 @@ esp_err_t bsp_lc76g_get_nmea(char **nmea_out, size_t *length_out)
     if (ret != ESP_OK) {
         ESP_LOGW(TAG, "GPS Step 3 (read data cmd to 0x50) failed: %s", esp_err_to_name(ret));
         return ESP_FAIL;
+    }
+
+    // Wait for bus to be idle before switching to different device address
+    ret = i2c_master_bus_wait_all_done(i2c_handle, 1000);
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "GPS bus wait after Step 3 failed: %s", esp_err_to_name(ret));
     }
 
     // Step 4: Read NMEA data from 0x54
