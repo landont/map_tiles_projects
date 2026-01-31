@@ -6,7 +6,6 @@
 #include "lvgl.h"
 #include "bsp/esp-bsp.h"
 #include "simple_map.hpp"
-#include "battery_monitor.h"
 #include "gps_lc76g_i2c.h"
 
 // Touch reset pin (GPIO 40)
