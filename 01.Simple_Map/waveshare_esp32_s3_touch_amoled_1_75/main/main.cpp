@@ -94,14 +94,9 @@ extern "C" void app_main(void)
         printf("Failed to mount SD card, error: %s\n", esp_err_to_name(err));
     }
 
-    io_expander = bsp_io_expander_init();
-    if (io_expander == NULL) {
-        printf("Failed to initialize IO expander\n");
-        return;
-    }
-
-    // IO expander initialized for potential future use
-    // GPS reset pin is unknown - do not toggle EXIO7 (that's LCD/touch reset)
+    // Skip IO expander - it requires new I2C master driver which conflicts with GPS legacy driver
+    // io_expander = bsp_io_expander_init();
+    // GPS reset pin is unknown anyway - EXIO7 is LCD/touch reset, not GPS
 
     // Reset touch controller via GPIO 40
     gpio_config_t io_conf = {
