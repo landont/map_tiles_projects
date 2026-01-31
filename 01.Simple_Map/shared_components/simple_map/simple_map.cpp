@@ -657,13 +657,8 @@ double SimpleMap::distance_between(double lat1, double lon1, double lat2, double
 }
 
 void SimpleMap::add_track_point(double lat, double lon) {
-    if (!track_dots) {
-        printf("SimpleMap: ERROR - track_dots not allocated\n");
-        return;
-    }
-
-    if (!map_group) {
-        printf("SimpleMap: ERROR - map_group not initialized\n");
+    if (!track_line_points) {
+        printf("SimpleMap: ERROR - track_line_points not allocated\n");
         return;
     }
 
