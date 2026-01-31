@@ -269,6 +269,10 @@ static void parse_gsv(const char *sentence)
 // Diagnostic counters
 static uint32_t checksum_failures = 0;
 static uint32_t valid_sentences = 0;
+static uint32_t gga_count = 0;
+static uint32_t rmc_count = 0;
+static uint32_t gsa_count = 0;
+static uint32_t gsv_count = 0;
 
 static void parse_nmea_sentence(const char *sentence)
 {
@@ -276,8 +280,18 @@ static void parse_nmea_sentence(const char *sentence)
 
     if (!nmea_verify_checksum(sentence)) {
         checksum_failures++;
-        if (checksum_failures <= 5) {
-            ESP_LOGW(TAG, "Checksum fail #%lu: %s", checksum_failures, sentence);
+        // Log first 10 checksum failures with sentence type
+        if (checksum_failures <= 10) {
+            // Extract sentence type (e.g., GPRMC, GPGGA)
+            char type[7] = {0};
+            if (sentence[0] == '$' && strlen(sentence) > 6) {
+                strncpy(type, sentence + 1, 6);
+                char *comma = strchr(type, ',');
+                if (comma) *comma = '\0';
+            }
+            ESP_LOGW(TAG, "Checksum fail #%lu [%s]: %.60s%s",
+                     checksum_failures, type, sentence,
+                     strlen(sentence) > 60 ? "..." : "");
         }
         return;
     }
@@ -289,16 +303,20 @@ static void parse_nmea_sentence(const char *sentence)
     }
 
     if (strstr(sentence, "GGA")) {
+        gga_count++;
         parse_gga(sentence);
     } else if (strstr(sentence, "RMC")) {
+        rmc_count++;
         parse_rmc(sentence);
 
         if (data_callback && current_gps_data.valid) {
             data_callback(&current_gps_data, data_callback_user_data);
         }
     } else if (strstr(sentence, "GSA")) {
+        gsa_count++;
         parse_gsa(sentence);
     } else if (strstr(sentence, "GSV")) {
+        gsv_count++;
         parse_gsv(sentence);
     }
 }
@@ -367,8 +385,12 @@ static void gps_uart_task(void *pvParameters)
             if (now - last_status_time >= 10000) {
                 last_status_time = now;
                 if (bytes_received > 0) {
-                    ESP_LOGI(TAG, "GPS Status: %lu bytes | %lu NMEA parsed | %lu checksum fails",
-                             bytes_received, sentences_received, checksum_failures);
+                    ESP_LOGI(TAG, "GPS Status: %lu bytes | %lu OK | %lu FAIL (%.0f%% loss)",
+                             bytes_received, sentences_received, checksum_failures,
+                             (sentences_received + checksum_failures) > 0 ?
+                             (100.0f * checksum_failures / (sentences_received + checksum_failures)) : 0);
+                    ESP_LOGI(TAG, "  Sentences: GGA=%lu RMC=%lu GSA=%lu GSV=%lu",
+                             gga_count, rmc_count, gsa_count, gsv_count);
                     ESP_LOGI(TAG, "  Fix: %s | Type: %d | Sats used: %d | Sats visible: %d",
                              current_gps_data.valid ? "YES" : "NO",
                              current_gps_data.fix_type,
@@ -378,6 +400,10 @@ static void gps_uart_task(void *pvParameters)
                         ESP_LOGI(TAG, "  Pos: %.6f, %.6f | Alt: %.1fm | HDOP: %.1f",
                                  current_gps_data.latitude, current_gps_data.longitude,
                                  current_gps_data.altitude, current_gps_data.hdop);
+                    }
+                    // If high checksum failure rate, warn about signal issues
+                    if (checksum_failures > sentences_received && checksum_failures > 10) {
+                        ESP_LOGW(TAG, "  HIGH ERROR RATE: Check resistor value and connection");
                     }
                     // If we have bytes but no sentences, show raw sample
                     if (sentences_received == 0 && bytes_received > 50) {
