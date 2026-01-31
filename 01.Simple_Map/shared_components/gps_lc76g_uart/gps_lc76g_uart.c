@@ -329,32 +329,15 @@ static void gps_uart_task(void *pvParameters)
     uint8_t rx_byte;
     int consecutive_errors = 0;
     uint32_t last_data_time = 0;
-    uint32_t bytes_received = 0;
-    uint32_t sentences_received = 0;
-    uint32_t last_status_time = 0;
-    bool first_byte_received = false;
 
-    ESP_LOGI(TAG, "========================================");
-    ESP_LOGI(TAG, "GPS UART task started on GPIO%d", GPS_UART_RX_PIN);
-    ESP_LOGI(TAG, "Baud rate: %d", GPS_UART_BAUD);
-    ESP_LOGI(TAG, "Waiting for data from GPS module...");
-    ESP_LOGI(TAG, "(Check resistor connection: GPS TXD -> GPIO%d)", GPS_UART_RX_PIN);
-    ESP_LOGI(TAG, "========================================");
+    ESP_LOGI(TAG, "GPS UART task started");
 
     while (1) {
         int len = uart_read_bytes(GPS_UART_NUM, &rx_byte, 1, pdMS_TO_TICKS(100));
 
         if (len > 0) {
-            bytes_received++;
             consecutive_errors = 0;
             last_data_time = esp_timer_get_time() / 1000;
-
-            // Log first byte received
-            if (!first_byte_received) {
-                first_byte_received = true;
-                ESP_LOGI(TAG, "*** FIRST BYTE RECEIVED! GPS connection confirmed ***");
-                ESP_LOGI(TAG, "First byte: 0x%02X ('%c')", rx_byte, (rx_byte >= 32 && rx_byte < 127) ? rx_byte : '?');
-            }
 
             if (rx_byte == '$') {
                 // Start of new NMEA sentence
@@ -366,10 +349,6 @@ static void gps_uart_task(void *pvParameters)
                     nmea_buffer[nmea_idx] = '\0';
                     if (nmea_buffer[0] == '$') {
                         sentences_received++;
-                        // Log first 10 sentences and then every 100th sentence
-                        if (sentences_received <= 10 || sentences_received % 100 == 0) {
-                            ESP_LOGI(TAG, "[#%lu] %s", sentences_received, nmea_buffer);
-                        }
                         parse_nmea_sentence(nmea_buffer);
                     }
                     nmea_idx = 0;
@@ -380,41 +359,6 @@ static void gps_uart_task(void *pvParameters)
         } else {
             // No data received - check for timeout
             uint32_t now = esp_timer_get_time() / 1000;
-
-            // Periodic status update every 10 seconds
-            if (now - last_status_time >= 10000) {
-                last_status_time = now;
-                if (bytes_received > 0) {
-                    ESP_LOGI(TAG, "GPS Status: %lu bytes | %lu OK | %lu FAIL (%.0f%% loss)",
-                             bytes_received, sentences_received, checksum_failures,
-                             (sentences_received + checksum_failures) > 0 ?
-                             (100.0f * checksum_failures / (sentences_received + checksum_failures)) : 0);
-                    ESP_LOGI(TAG, "  Sentences: GGA=%lu RMC=%lu GSA=%lu GSV=%lu",
-                             gga_count, rmc_count, gsa_count, gsv_count);
-                    ESP_LOGI(TAG, "  Fix: %s | Type: %d | Sats used: %d | Sats visible: %d",
-                             current_gps_data.valid ? "YES" : "NO",
-                             current_gps_data.fix_type,
-                             current_gps_data.satellites_used,
-                             current_gps_data.satellites_visible);
-                    if (current_gps_data.valid) {
-                        ESP_LOGI(TAG, "  Pos: %.6f, %.6f | Alt: %.1fm | HDOP: %.1f",
-                                 current_gps_data.latitude, current_gps_data.longitude,
-                                 current_gps_data.altitude, current_gps_data.hdop);
-                    }
-                    // If high checksum failure rate, warn about signal issues
-                    if (checksum_failures > sentences_received && checksum_failures > 10) {
-                        ESP_LOGW(TAG, "  HIGH ERROR RATE: Check resistor value and connection");
-                    }
-                    // If we have bytes but no sentences, show raw sample
-                    if (sentences_received == 0 && bytes_received > 50) {
-                        ESP_LOGW(TAG, "  WARNING: Receiving bytes but no valid NMEA sentences!");
-                        ESP_LOGW(TAG, "  Check: baud rate mismatch or signal integrity issues");
-                    }
-                } else {
-                    ESP_LOGW(TAG, "GPS Status: NO DATA RECEIVED - Check hardware connection!");
-                    ESP_LOGW(TAG, "  -> Verify resistor from GPS TXD to GPIO%d", GPS_UART_RX_PIN);
-                }
-            }
 
             if (last_data_time > 0 && (now - last_data_time) > 5000) {
                 // No data for 5 seconds
@@ -444,9 +388,10 @@ static int detect_baud_rate(void)
 
     uint8_t buffer[128];
 
+    ESP_LOGI(TAG, "Auto-detecting GPS baud rate...");
+
     for (int i = 0; i < num_rates; i++) {
         int baud = baud_rates[i];
-        ESP_LOGI(TAG, "Trying baud rate: %d...", baud);
 
         // Change baud rate
         uart_set_baudrate(GPS_UART_NUM, baud);
@@ -482,16 +427,11 @@ static int detect_baud_rate(void)
 
         if (total_chars > 0) {
             int valid_percent = (valid_chars * 100) / total_chars;
-            ESP_LOGI(TAG, "  Baud %d: %d bytes, %d%% valid ASCII, %d '$' signs",
-                     baud, total_chars, valid_percent, dollar_signs);
 
             // If >90% valid ASCII and we saw some $ signs, this is likely correct
             if (valid_percent > 90 && dollar_signs >= 2) {
-                ESP_LOGI(TAG, "  >>> Detected correct baud rate: %d", baud);
                 return baud;
             }
-        } else {
-            ESP_LOGW(TAG, "  Baud %d: No data received", baud);
         }
     }
 
@@ -541,15 +481,8 @@ esp_err_t gps_uart_init(void)
     }
 
     // Auto-detect baud rate
-    ESP_LOGI(TAG, "========================================");
-    ESP_LOGI(TAG, "Auto-detecting GPS baud rate...");
-    ESP_LOGI(TAG, "========================================");
-
     int detected_baud = detect_baud_rate();
-    if (detected_baud != GPS_UART_BAUD) {
-        ESP_LOGI(TAG, "Setting baud rate to detected: %d", detected_baud);
-        uart_set_baudrate(GPS_UART_NUM, detected_baud);
-    }
+    uart_set_baudrate(GPS_UART_NUM, detected_baud);
 
     // Flush buffer after baud rate detection
     uart_flush_input(GPS_UART_NUM);
@@ -557,10 +490,7 @@ esp_err_t gps_uart_init(void)
     memset(&current_gps_data, 0, sizeof(current_gps_data));
     gps_initialized = true;
 
-    ESP_LOGI(TAG, "========================================");
-    ESP_LOGI(TAG, "GPS UART initialized at %d baud", detected_baud);
-    ESP_LOGI(TAG, "Waiting for GPS fix...");
-    ESP_LOGI(TAG, "========================================");
+    ESP_LOGI(TAG, "GPS UART initialized on GPIO%d at %d baud", GPS_UART_RX_PIN, detected_baud);
 
     return ESP_OK;
 }
