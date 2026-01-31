@@ -348,7 +348,6 @@ static void gps_uart_task(void *pvParameters)
                 if (nmea_idx > 0) {
                     nmea_buffer[nmea_idx] = '\0';
                     if (nmea_buffer[0] == '$') {
-                        sentences_received++;
                         parse_nmea_sentence(nmea_buffer);
                     }
                     nmea_idx = 0;
