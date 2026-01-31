@@ -443,10 +443,10 @@ void SimpleMap::set_gps_position(double latitude, double longitude, bool has_fix
             load_map_tiles();
         }
 
-        // Always center map on GPS position (unless user is actively scrolling)
+        // Always center map on GPS position (unless user scrolled within last 30 seconds)
         uint32_t current_time = esp_timer_get_time() / 1000;
         uint32_t idle_time = current_time - last_user_scroll_time;
-        if (!user_scrolled || idle_time >= 2000) {
+        if (!user_scrolled || idle_time >= 30000) {
             current_lat = latitude;
             current_lon = longitude;
             center_map_on_gps();
@@ -679,13 +679,18 @@ void SimpleMap::update_track_dots_positions() {
         if (in_bounds) {
             lv_obj_set_pos(track_dots[idx], dot_x, dot_y);
             lv_obj_clear_flag(track_dots[idx], LV_OBJ_FLAG_HIDDEN);
-            lv_obj_move_foreground(track_dots[idx]);  // Ensure dots are on top
+            lv_obj_move_foreground(track_dots[idx]);
             visible_count++;
         } else {
             lv_obj_add_flag(track_dots[idx], LV_OBJ_FLAG_HIDDEN);
         }
     }
 
+    // Log every 50 updates
+    static int update_counter = 0;
+    if (++update_counter % 50 == 0 && track_log_count > 0) {
+        printf("SimpleMap: Track dots update - count=%d, visible=%d\n", track_log_count, visible_count);
+    }
 }
 
 void SimpleMap::clear_track_log() {
@@ -987,11 +992,16 @@ void SimpleMap::load_map_tiles() {
         // Hide loading popup
         hide_loading_popup();
 
-        // Update GPS marker position after tiles are loaded
+        // Update track dots positions FIRST (so they're behind GPS marker)
+        update_track_dots_positions();
+
+        // Update GPS marker position after tiles are loaded (on top of dots)
         update_gps_marker_position();
 
-        // Update track dots positions after tiles are loaded
-        update_track_dots_positions();
+        // Ensure GPS marker is on top of everything
+        if (gps_marker) {
+            lv_obj_move_foreground(gps_marker);
+        }
 
         // Clear loading flag
         is_loading = false;
