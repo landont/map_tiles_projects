@@ -118,21 +118,18 @@ extern "C" void app_main(void)
 
     bsp_display_unlock();
 
-    // Get I2C bus handle for peripherals
-    i2c_master_bus_handle_t i2c_handle = bsp_i2c_get_handle();
-
-    // Initialize GPS first (creates I2C mutex used by other peripherals)
-    if (gps_i2c_init(i2c_handle) == ESP_OK) {
+    // Initialize GPS using BSP's LC76G function (handles dual-address I2C)
+    if (gps_i2c_init() == ESP_OK) {
         gps_i2c_register_data_callback(gps_callback, NULL);
         gps_i2c_register_error_callback(gps_error_callback, NULL);
-        // Hardware reset disabled - GPS reset pin unknown on this board
-        gps_i2c_start(1000);  // Poll every 1 second (matches GPS update rate)
-        printf("GPS initialized via I2C (addr: 0x50/0x54)\n");
+        gps_i2c_start(1000);  // Poll every 1 second
+        printf("GPS initialized\n");
     } else {
         printf("GPS initialization failed\n");
     }
 
-    // Initialize battery monitor after GPS (uses GPS I2C mutex)
+    // Initialize battery monitor (uses new I2C master driver via BSP)
+    i2c_master_bus_handle_t i2c_handle = bsp_i2c_get_handle();
     if (battery_monitor_init(i2c_handle) == ESP_OK) {
         battery_monitor_start(5000);  // Update every 5 seconds
     } else {

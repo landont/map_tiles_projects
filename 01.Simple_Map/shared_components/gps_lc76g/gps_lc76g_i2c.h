@@ -5,7 +5,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "esp_err.h"
-#include "driver/i2c_master.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -78,8 +77,8 @@ typedef void (*gps_nmea_callback_t)(const char *sentence, void *user_data);
 typedef void (*gps_error_callback_t)(int error_count, void *user_data);
 typedef void (*gps_reset_callback_t)(void *user_data);  // Hardware reset callback
 
-// Initialize GPS using existing I2C bus handle from BSP
-esp_err_t gps_i2c_init(i2c_master_bus_handle_t i2c_bus);
+// Initialize GPS - uses BSP's bsp_lc76g_get_nmea for I2C communication
+esp_err_t gps_i2c_init(void);
 esp_err_t gps_i2c_deinit(void);
 esp_err_t gps_i2c_get_data(gps_data_t *data);
 esp_err_t gps_i2c_register_data_callback(gps_data_callback_t callback, void *user_data);
