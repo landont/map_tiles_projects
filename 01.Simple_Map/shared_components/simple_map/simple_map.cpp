@@ -304,9 +304,9 @@ void SimpleMap::create_gps_indicator(lv_obj_t* parent_screen) {
 }
 
 void SimpleMap::create_direction_arrow() {
-    // Create container for direction triangle (24x24)
+    // Create container for direction triangle (48x48) - doubled from 24x24
     gps_marker = lv_obj_create(map_group);
-    lv_obj_set_size(gps_marker, 24, 24);
+    lv_obj_set_size(gps_marker, 48, 48);
     lv_obj_set_style_bg_opa(gps_marker, LV_OPA_TRANSP, 0);
     lv_obj_set_style_border_width(gps_marker, 0, 0);
     lv_obj_set_style_pad_all(gps_marker, 0, 0);
@@ -316,42 +316,42 @@ void SimpleMap::create_direction_arrow() {
     lv_color_t red = lv_color_make(255, 50, 50);
 
     // Create a simple filled triangle using stacked trapezoids
-    // Narrow triangle pointing up: ~18px tall, ~8px base
+    // Narrow triangle pointing up: ~36px tall, ~16px base (doubled)
 
-    // Bottom section (widest) - 4px tall, 8px wide
+    // Bottom section (widest) - 8px tall, 16px wide
     lv_obj_t* bottom = lv_obj_create(gps_marker);
-    lv_obj_set_size(bottom, 8, 4);
-    lv_obj_set_pos(bottom, 8, 17);
+    lv_obj_set_size(bottom, 16, 8);
+    lv_obj_set_pos(bottom, 16, 34);
     lv_obj_set_style_bg_color(bottom, red, 0);
     lv_obj_set_style_bg_opa(bottom, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(bottom, 0, 0);
     lv_obj_set_style_radius(bottom, 0, 0);
     lv_obj_clear_flag(bottom, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Middle-bottom section - 4px tall, 6px wide
+    // Middle-bottom section - 8px tall, 12px wide
     lv_obj_t* mid_bot = lv_obj_create(gps_marker);
-    lv_obj_set_size(mid_bot, 6, 4);
-    lv_obj_set_pos(mid_bot, 9, 13);
+    lv_obj_set_size(mid_bot, 12, 8);
+    lv_obj_set_pos(mid_bot, 18, 26);
     lv_obj_set_style_bg_color(mid_bot, red, 0);
     lv_obj_set_style_bg_opa(mid_bot, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(mid_bot, 0, 0);
     lv_obj_set_style_radius(mid_bot, 0, 0);
     lv_obj_clear_flag(mid_bot, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Middle-top section - 4px tall, 4px wide
+    // Middle-top section - 8px tall, 8px wide
     lv_obj_t* mid_top = lv_obj_create(gps_marker);
-    lv_obj_set_size(mid_top, 4, 4);
-    lv_obj_set_pos(mid_top, 10, 9);
+    lv_obj_set_size(mid_top, 8, 8);
+    lv_obj_set_pos(mid_top, 20, 18);
     lv_obj_set_style_bg_color(mid_top, red, 0);
     lv_obj_set_style_bg_opa(mid_top, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(mid_top, 0, 0);
     lv_obj_set_style_radius(mid_top, 0, 0);
     lv_obj_clear_flag(mid_top, LV_OBJ_FLAG_SCROLLABLE);
 
-    // Top tip section - 5px tall, 2px wide
+    // Top tip section - 10px tall, 4px wide
     lv_obj_t* tip = lv_obj_create(gps_marker);
-    lv_obj_set_size(tip, 2, 5);
-    lv_obj_set_pos(tip, 11, 4);
+    lv_obj_set_size(tip, 4, 10);
+    lv_obj_set_pos(tip, 22, 8);
     lv_obj_set_style_bg_color(tip, red, 0);
     lv_obj_set_style_bg_opa(tip, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(tip, 0, 0);
@@ -359,8 +359,8 @@ void SimpleMap::create_direction_arrow() {
     lv_obj_clear_flag(tip, LV_OBJ_FLAG_SCROLLABLE);
 
     // Set transform pivot point to center of marker for rotation
-    lv_obj_set_style_transform_pivot_x(gps_marker, 12, 0);
-    lv_obj_set_style_transform_pivot_y(gps_marker, 12, 0);
+    lv_obj_set_style_transform_pivot_x(gps_marker, 24, 0);
+    lv_obj_set_style_transform_pivot_y(gps_marker, 24, 0);
 }
 
 void SimpleMap::update_battery_indicator(int percent, bool is_charging) {
@@ -424,6 +424,35 @@ void SimpleMap::set_gps_position(double latitude, double longitude, bool has_fix
         // Prune old track points
         prune_old_track_points();
 
+        // Check if GPS is within loaded tiles, reload if needed
+        double gps_tile_x, gps_tile_y;
+        map_tiles_gps_to_tile_xy(map_handle, latitude, longitude, &gps_tile_x, &gps_tile_y);
+
+        int tile_x, tile_y;
+        map_tiles_get_position(map_handle, &tile_x, &tile_y);
+
+        bool gps_in_bounds = (gps_tile_x >= tile_x && gps_tile_x < tile_x + grid_cols &&
+                              gps_tile_y >= tile_y && gps_tile_y < tile_y + grid_rows);
+
+        if (!gps_in_bounds && !is_loading) {
+            // GPS is outside loaded tiles - need to reload
+            printf("SimpleMap: GPS outside tile bounds, reloading tiles\n");
+            current_lat = latitude;
+            current_lon = longitude;
+            map_tiles_set_center_from_gps(map_handle, latitude, longitude);
+            load_map_tiles();
+        }
+
+        // Always center map on GPS position (unless user is actively scrolling)
+        uint32_t current_time = esp_timer_get_time() / 1000;
+        uint32_t idle_time = current_time - last_user_scroll_time;
+        if (!user_scrolled || idle_time >= 2000) {
+            current_lat = latitude;
+            current_lon = longitude;
+            center_map_on_gps();
+            user_scrolled = false;
+        }
+
         // Update GPS marker position on the map
         update_gps_marker_position();
 
@@ -432,9 +461,6 @@ void SimpleMap::set_gps_position(double latitude, double longitude, bool has_fix
 
         // Update track dot positions
         update_track_dots_positions();
-
-        // Check if we should auto-center on GPS
-        check_auto_center();
     }
 
     // Show/hide GPS marker based on fix status
@@ -509,8 +535,8 @@ void SimpleMap::update_gps_marker_position() {
     map_tiles_get_position(map_handle, &tile_x, &tile_y);
 
     // Calculate pixel position relative to the map_group
-    int marker_x = (int)((x - tile_x) * MAP_TILES_TILE_SIZE) - 12;  // Center the 24px marker
-    int marker_y = (int)((y - tile_y) * MAP_TILES_TILE_SIZE) - 12;
+    int marker_x = (int)((x - tile_x) * MAP_TILES_TILE_SIZE) - 24;  // Center the 48px marker
+    int marker_y = (int)((y - tile_y) * MAP_TILES_TILE_SIZE) - 24;
 
     // Position the marker
     lv_obj_set_pos(gps_marker, marker_x, marker_y);
@@ -543,7 +569,12 @@ double SimpleMap::distance_between(double lat1, double lon1, double lat2, double
 
 void SimpleMap::add_track_point(double lat, double lon) {
     if (!track_dots) {
-        printf("SimpleMap: track_dots not allocated\n");
+        printf("SimpleMap: ERROR - track_dots not allocated\n");
+        return;
+    }
+
+    if (!map_group) {
+        printf("SimpleMap: ERROR - map_group not initialized\n");
         return;
     }
 
@@ -556,9 +587,12 @@ void SimpleMap::add_track_point(double lat, double lon) {
         if (dist < TRACK_LOG_MIN_DISTANCE) {
             return;  // Too close to last point, skip
         }
-        printf("SimpleMap: Adding track point, distance from last: %.1fm\n", dist);
+        // Only log occasionally to reduce spam
+        if (track_log_count % 10 == 0) {
+            printf("SimpleMap: Track point %d, dist: %.1fm\n", track_log_count, dist);
+        }
     } else {
-        printf("SimpleMap: Adding first track point\n");
+        printf("SimpleMap: Adding first track point at %.6f, %.6f\n", lat, lon);
     }
 
     // Add new point to circular buffer
@@ -590,7 +624,6 @@ void SimpleMap::add_track_point(double lat, double lon) {
         printf("SimpleMap: Created track dot %d\n", new_idx);
     }
 
-    printf("SimpleMap: Track log now has %d points\n", track_log_count);
 }
 
 void SimpleMap::prune_old_track_points() {
@@ -653,9 +686,6 @@ void SimpleMap::update_track_dots_positions() {
         }
     }
 
-    if (track_log_count > 0) {
-        printf("SimpleMap: Updated %d track dots, %d visible\n", track_log_count, visible_count);
-    }
 }
 
 void SimpleMap::clear_track_log() {
