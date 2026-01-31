@@ -313,7 +313,7 @@ void SimpleMap::create_gps_indicator(lv_obj_t* parent_screen) {
 void SimpleMap::create_speed_indicator(lv_obj_t* parent_screen) {
     // Create speed/pace container at bottom center
     speed_container = lv_obj_create(parent_screen);
-    lv_obj_set_size(speed_container, 170, 24);
+    lv_obj_set_size(speed_container, 190, 24);
     lv_obj_set_style_bg_color(speed_container, lv_color_make(0, 0, 0), 0);
     lv_obj_set_style_bg_opa(speed_container, LV_OPA_60, 0);
     lv_obj_set_style_border_width(speed_container, 1, 0);
