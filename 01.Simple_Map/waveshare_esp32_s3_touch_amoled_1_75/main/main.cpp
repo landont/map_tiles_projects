@@ -71,6 +71,17 @@ extern "C" void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
+    // Initialize GPS FIRST - it uses i2c_bus component which initializes legacy I2C driver
+    // This must happen before bsp_i2c_init() which uses the new I2C master driver
+    if (gps_i2c_init() == ESP_OK) {
+        gps_i2c_register_data_callback(gps_callback, NULL);
+        gps_i2c_register_error_callback(gps_error_callback, NULL);
+        gps_i2c_start(1000);  // Poll every 1 second
+        printf("GPS initialized\n");
+    } else {
+        printf("GPS initialization failed\n");
+    }
+
     bsp_i2c_init();
 
     esp_err_t err = bsp_sdcard_mount();
@@ -117,16 +128,6 @@ extern "C" void app_main(void)
     SimpleMap::center_map_on_gps();
 
     bsp_display_unlock();
-
-    // Initialize GPS using BSP's LC76G function (handles dual-address I2C)
-    if (gps_i2c_init() == ESP_OK) {
-        gps_i2c_register_data_callback(gps_callback, NULL);
-        gps_i2c_register_error_callback(gps_error_callback, NULL);
-        gps_i2c_start(1000);  // Poll every 1 second
-        printf("GPS initialized\n");
-    } else {
-        printf("GPS initialization failed\n");
-    }
 
     // Initialize battery monitor (uses new I2C master driver via BSP)
     i2c_master_bus_handle_t i2c_handle = bsp_i2c_get_handle();
