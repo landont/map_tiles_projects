@@ -23,6 +23,9 @@ lv_obj_t* SimpleMap::gps_icon = nullptr;
 lv_obj_t* SimpleMap::gps_label = nullptr;
 lv_obj_t* SimpleMap::gps_marker = nullptr;
 lv_obj_t* SimpleMap::loading_popup = nullptr;
+lv_obj_t* SimpleMap::speed_container = nullptr;
+lv_obj_t* SimpleMap::speed_label = nullptr;
+lv_obj_t* SimpleMap::pace_label = nullptr;
 double SimpleMap::current_lat = 0.0;
 double SimpleMap::current_lon = 0.0;
 double SimpleMap::gps_lat = 0.0;
@@ -108,6 +111,9 @@ bool SimpleMap::init(lv_obj_t* parent_screen) {
 
     // Create GPS indicator (left of battery)
     create_gps_indicator(parent_screen);
+
+    // Create speed/pace indicator at bottom
+    create_speed_indicator(parent_screen);
 
     // Set initial battery value (placeholder - integrate AXP2101 for real values)
     // Call update_battery_indicator() from your app with real values from AXP2101 PMIC
@@ -304,6 +310,73 @@ void SimpleMap::create_gps_indicator(lv_obj_t* parent_screen) {
     printf("SimpleMap: GPS indicator initialized with direction arrow and track log\n");
 }
 
+void SimpleMap::create_speed_indicator(lv_obj_t* parent_screen) {
+    // Create speed/pace container at bottom center
+    speed_container = lv_obj_create(parent_screen);
+    lv_obj_set_size(speed_container, 140, 24);
+    lv_obj_set_style_bg_color(speed_container, lv_color_make(0, 0, 0), 0);
+    lv_obj_set_style_bg_opa(speed_container, LV_OPA_60, 0);
+    lv_obj_set_style_border_width(speed_container, 1, 0);
+    lv_obj_set_style_border_color(speed_container, lv_color_white(), 0);
+    lv_obj_set_style_radius(speed_container, 4, 0);
+    lv_obj_set_style_pad_all(speed_container, 2, 0);
+    lv_obj_clear_flag(speed_container, LV_OBJ_FLAG_SCROLLABLE);
+
+    // Position at bottom center
+    if (is_round_display) {
+        lv_obj_align(speed_container, LV_ALIGN_BOTTOM_MID, 0, -15);
+    } else {
+        lv_obj_align(speed_container, LV_ALIGN_BOTTOM_MID, 0, -5);
+    }
+
+    // Speed label on left side
+    speed_label = lv_label_create(speed_container);
+    lv_label_set_text(speed_label, "-- km/h");
+    lv_obj_set_style_text_color(speed_label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(speed_label, &lv_font_montserrat_12, 0);
+    lv_obj_align(speed_label, LV_ALIGN_LEFT_MID, 2, 0);
+
+    // Pace label on right side
+    pace_label = lv_label_create(speed_container);
+    lv_label_set_text(pace_label, "--:--/mi");
+    lv_obj_set_style_text_color(pace_label, lv_color_white(), 0);
+    lv_obj_set_style_text_font(pace_label, &lv_font_montserrat_12, 0);
+    lv_obj_align(pace_label, LV_ALIGN_RIGHT_MID, -2, 0);
+
+    printf("SimpleMap: Speed/pace indicator initialized\n");
+}
+
+void SimpleMap::update_speed_indicator(float speed_kmh) {
+    if (!speed_label || !pace_label) return;
+
+    // Update speed label
+    if (speed_kmh < 0.5f) {
+        lv_label_set_text(speed_label, "-- km/h");
+        lv_label_set_text(pace_label, "--:--/mi");
+    } else {
+        // Format speed
+        lv_label_set_text_fmt(speed_label, "%.1f km/h", speed_kmh);
+
+        // Calculate pace in minutes per mile
+        // speed_kmh to speed_mph: divide by 1.60934
+        // pace (min/mile) = 60 / speed_mph
+        float speed_mph = speed_kmh / 1.60934f;
+        float pace_min_per_mile = 60.0f / speed_mph;
+
+        // Format pace as mm:ss
+        int pace_minutes = (int)pace_min_per_mile;
+        int pace_seconds = (int)((pace_min_per_mile - pace_minutes) * 60);
+
+        if (pace_minutes > 99) {
+            lv_label_set_text(pace_label, "--:--/mi");
+        } else {
+            lv_label_set_text_fmt(pace_label, "%d:%02d/mi", pace_minutes, pace_seconds);
+        }
+    }
+
+    lv_obj_invalidate(speed_container);
+}
+
 void SimpleMap::create_direction_arrow() {
     // Create container for direction triangle (48x48) - doubled from 24x24
     gps_marker = lv_obj_create(map_group);
@@ -412,11 +485,18 @@ void SimpleMap::update_battery_indicator(int percent, bool is_charging) {
     printf("SimpleMap: Battery indicator updated successfully\n");
 }
 
-void SimpleMap::set_gps_position(double latitude, double longitude, bool has_fix, float heading) {
+void SimpleMap::set_gps_position(double latitude, double longitude, bool has_fix, float heading, float speed_kmh) {
     gps_lat = latitude;
     gps_lon = longitude;
     gps_has_fix = has_fix;
     gps_heading = heading;
+
+    // Update speed/pace indicator
+    if (has_fix && speed_kmh >= 0) {
+        update_speed_indicator(speed_kmh);
+    } else if (!has_fix) {
+        update_speed_indicator(-1.0f);  // Clear display when no fix
+    }
 
     if (has_fix) {
         // Add to track log if moved enough distance
@@ -1312,6 +1392,11 @@ void SimpleMap::cleanup() {
         gps_container = nullptr;
     }
 
+    if (speed_container) {
+        lv_obj_delete(speed_container);
+        speed_container = nullptr;
+    }
+
     if (loading_popup) {
         lv_obj_delete(loading_popup);
         loading_popup = nullptr;
@@ -1323,6 +1408,8 @@ void SimpleMap::cleanup() {
     gps_icon = nullptr;
     gps_label = nullptr;
     gps_marker = nullptr;  // Cleaned up with map_group
+    speed_label = nullptr;
+    pace_label = nullptr;
 
     // Clean up the map tiles component
     if (map_handle) {

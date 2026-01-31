@@ -45,7 +45,7 @@ static void gps_callback(const gps_data_t *data, void *user_data) {
         float heading = (data->speed_kmh > 1.0f) ? data->course : -1.0f;
 
         if (bsp_display_lock(100)) {
-            SimpleMap::set_gps_position(data->latitude, data->longitude, true, heading);
+            SimpleMap::set_gps_position(data->latitude, data->longitude, true, heading, data->speed_kmh);
             SimpleMap::update_gps_status(data->satellites_used, data->fix_type);
             bsp_display_unlock();
         }
@@ -55,7 +55,7 @@ static void gps_callback(const gps_data_t *data, void *user_data) {
 
         // No valid fix
         if (bsp_display_lock(100)) {
-            SimpleMap::set_gps_position(0, 0, false, -1.0f);
+            SimpleMap::set_gps_position(0, 0, false, -1.0f, -1.0f);
             SimpleMap::update_gps_status(data->satellites_visible, 0);
             bsp_display_unlock();
         }

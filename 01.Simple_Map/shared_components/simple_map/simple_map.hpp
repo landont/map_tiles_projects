@@ -66,8 +66,8 @@ public:
     static bool try_auto_center_on_gps();
 
     // GPS position tracking
-    // Update GPS position from external GPS module (includes heading for direction arrow)
-    static void set_gps_position(double latitude, double longitude, bool has_fix, float heading = -1.0f);
+    // Update GPS position from external GPS module (includes heading for direction arrow, speed for indicator)
+    static void set_gps_position(double latitude, double longitude, bool has_fix, float heading = -1.0f, float speed_kmh = -1.0f);
 
     // Get GPS position
     static void get_gps_position(double* latitude, double* longitude, bool* has_fix);
@@ -80,6 +80,9 @@ public:
 
     // Show GPS I2C error state (red indicator with "ERR" text)
     static void show_gps_error();
+
+    // Update speed/pace indicator (speed in km/h)
+    static void update_speed_indicator(float speed_kmh);
 
     // Check if user has manually scrolled the map
     static bool is_user_scrolled();
@@ -102,6 +105,9 @@ private:
     static lv_obj_t* gps_label;          // GPS satellite count label
     static lv_obj_t* gps_marker;         // GPS position direction arrow marker
     static lv_obj_t* loading_popup;
+    static lv_obj_t* speed_container;    // Speed/pace status bar container
+    static lv_obj_t* speed_label;        // Speed label (km/h)
+    static lv_obj_t* pace_label;         // Pace label (min/mile)
 
     // Track log storage
     static TrackPoint track_log[TRACK_LOG_MAX_POINTS];
@@ -137,6 +143,7 @@ private:
     static void create_zoom_buttons(lv_obj_t* parent_screen);
     static void create_battery_indicator(lv_obj_t* parent_screen);
     static void create_gps_indicator(lv_obj_t* parent_screen);
+    static void create_speed_indicator(lv_obj_t* parent_screen);
     static void update_gps_marker_position();
     static void update_gps_marker_rotation();
     static void add_track_point(double lat, double lon);
