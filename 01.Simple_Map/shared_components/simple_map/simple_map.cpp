@@ -313,13 +313,13 @@ void SimpleMap::create_gps_indicator(lv_obj_t* parent_screen) {
 void SimpleMap::create_speed_indicator(lv_obj_t* parent_screen) {
     // Create speed/pace container at bottom center
     speed_container = lv_obj_create(parent_screen);
-    lv_obj_set_size(speed_container, 140, 24);
+    lv_obj_set_size(speed_container, 170, 24);
     lv_obj_set_style_bg_color(speed_container, lv_color_make(0, 0, 0), 0);
     lv_obj_set_style_bg_opa(speed_container, LV_OPA_60, 0);
     lv_obj_set_style_border_width(speed_container, 1, 0);
     lv_obj_set_style_border_color(speed_container, lv_color_white(), 0);
     lv_obj_set_style_radius(speed_container, 4, 0);
-    lv_obj_set_style_pad_all(speed_container, 2, 0);
+    lv_obj_set_style_pad_all(speed_container, 4, 0);
     lv_obj_clear_flag(speed_container, LV_OBJ_FLAG_SCROLLABLE);
 
     // Position at bottom center
@@ -334,14 +334,14 @@ void SimpleMap::create_speed_indicator(lv_obj_t* parent_screen) {
     lv_label_set_text(speed_label, "-- km/h");
     lv_obj_set_style_text_color(speed_label, lv_color_white(), 0);
     lv_obj_set_style_text_font(speed_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(speed_label, LV_ALIGN_LEFT_MID, 2, 0);
+    lv_obj_align(speed_label, LV_ALIGN_LEFT_MID, 0, 0);
 
     // Pace label on right side
     pace_label = lv_label_create(speed_container);
     lv_label_set_text(pace_label, "--:--/mi");
     lv_obj_set_style_text_color(pace_label, lv_color_white(), 0);
     lv_obj_set_style_text_font(pace_label, &lv_font_montserrat_14, 0);
-    lv_obj_align(pace_label, LV_ALIGN_RIGHT_MID, -2, 0);
+    lv_obj_align(pace_label, LV_ALIGN_RIGHT_MID, 0, 0);
 
     printf("SimpleMap: Speed/pace indicator initialized\n");
 }
