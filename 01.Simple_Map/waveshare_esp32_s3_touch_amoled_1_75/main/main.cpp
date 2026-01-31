@@ -6,7 +6,8 @@
 #include "lvgl.h"
 #include "bsp/esp-bsp.h"
 #include "simple_map.hpp"
-#include "gps_lc76g_i2c.h"
+#include "battery_monitor.h"
+#include "gps_lc76g_uart.h"
 
 // Touch reset pin (GPIO 40)
 #define TOUCH_RST_PIN GPIO_NUM_40
@@ -70,14 +71,14 @@ extern "C" void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    // Initialize GPS (uses legacy I2C driver, which is also used by touch)
-    if (gps_i2c_init() == ESP_OK) {
-        gps_i2c_register_data_callback(gps_callback, NULL);
-        gps_i2c_register_error_callback(gps_error_callback, NULL);
-        gps_i2c_start(1000);  // Poll every 1 second
-        printf("GPS initialized\n");
+    // Initialize GPS via UART (GPIO18 RX)
+    if (gps_uart_init() == ESP_OK) {
+        gps_uart_register_data_callback(gps_callback, NULL);
+        gps_uart_register_error_callback(gps_error_callback, NULL);
+        gps_uart_start();
+        printf("GPS UART initialized\n");
     } else {
-        printf("GPS initialization failed\n");
+        printf("GPS UART initialization failed\n");
     }
 
     esp_err_t err = bsp_sdcard_mount();
@@ -85,8 +86,8 @@ extern "C" void app_main(void)
         printf("Failed to mount SD card, error: %s\n", esp_err_to_name(err));
     }
 
-    // Skip IO expander - requires new I2C driver which is incompatible with GPS legacy driver
-    // io_expander = bsp_io_expander_init();
+    // Initialize IO expander
+    io_expander = bsp_io_expander_init();
 
     // Reset touch controller via GPIO 40
     gpio_config_t io_conf = {
@@ -119,7 +120,6 @@ extern "C" void app_main(void)
 
     bsp_display_unlock();
 
-    // Skip battery monitor - requires new I2C driver which is incompatible with GPS legacy driver
-    // TODO: Modify battery_monitor to use legacy I2C driver (i2c_bus)
-    printf("Battery monitor disabled (I2C driver conflict with GPS)\n");
+    // Initialize battery monitor
+    battery_monitor_init(bsp_i2c_get_handle());
 }
