@@ -374,6 +374,10 @@ static esp_err_t gps_i2c_read_nmea(char *buffer, size_t buffer_size, size_t *byt
             break;
         }
         retry_count++;
+        if (retry_count == 1) {
+            // Log details on first failure
+            ESP_LOGW(TAG, "Step 1b first fail: %s (handle=%p)", esp_err_to_name(ret), i2c_dev_read);
+        }
         if (retry_count > MAX_I2C_RETRIES) {
             ESP_LOGW(TAG, "Step 1b failed after %d retries: %s", retry_count, esp_err_to_name(ret));
             if (i2c_mutex) xSemaphoreGive(i2c_mutex);
@@ -775,13 +779,24 @@ esp_err_t gps_i2c_init(i2c_master_bus_handle_t i2c_bus)
     }
     ESP_LOGI(TAG, "Added read device at 0x%02X", GPS_I2C_ADDR_READ);
 
+    // Log device handle addresses for debugging
+    ESP_LOGI(TAG, "Device handles: write=%p, read=%p", i2c_dev_write, i2c_dev_read);
+
     // Probe to verify GPS module exists at write address
     ret = i2c_master_probe(i2c_bus, GPS_I2C_ADDR_WRITE, pdMS_TO_TICKS(100));
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "GPS module not found at address 0x%02X: %s", GPS_I2C_ADDR_WRITE, esp_err_to_name(ret));
         return ESP_ERR_NOT_FOUND;
     }
-    ESP_LOGI(TAG, "GPS module found at address 0x%02X", GPS_I2C_ADDR_WRITE);
+    ESP_LOGI(TAG, "GPS probe at 0x%02X: OK", GPS_I2C_ADDR_WRITE);
+
+    // Probe read address - LC76G may not respond until after a write command
+    ret = i2c_master_probe(i2c_bus, GPS_I2C_ADDR_READ, pdMS_TO_TICKS(100));
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "GPS probe at 0x%02X failed: %s (may be normal)", GPS_I2C_ADDR_READ, esp_err_to_name(ret));
+    } else {
+        ESP_LOGI(TAG, "GPS probe at 0x%02X: OK", GPS_I2C_ADDR_READ);
+    }
 
     // Allow I2C devices to stabilize after creation
     vTaskDelay(pdMS_TO_TICKS(200));
