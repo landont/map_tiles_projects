@@ -1,7 +1,7 @@
 # Functional Specification Document (FSD)
 ## ESP32-S3-Touch-AMOLED-1.75 Map Viewer Application
 
-**Version:** 1.1
+**Version:** 1.2
 **Date:** January 31, 2026
 **Project:** Simple Map Viewer for Waveshare ESP32-S3-Touch-AMOLED-1.75
 
@@ -262,6 +262,21 @@ The system provides:
   - Disappears when all tiles loaded
   - Prevents multiple simultaneous load operations
 
+#### FR-3.3.5 Speed/Pace Indicator
+- **Description:** Status bar showing current speed and pace
+- **Position:** Bottom center of screen (5px from edge on rectangular, 15px on round)
+- **Size:** 140x24 pixels
+- **Components:**
+  - Speed label (left side): Current speed in km/h (e.g., "12.5 km/h")
+  - Pace label (right side): Pace in minutes per mile (e.g., "8:03/mi")
+- **Appearance:** Semi-transparent black background (60% opacity), white border, rounded corners
+- **Behavior:**
+  - Shows "--" values when speed < 0.5 km/h or no GPS fix
+  - Pace calculated from speed: pace (min/mi) = 60 / speed_mph
+  - Pace capped at 99:59/mi for display purposes
+  - Updated via GPS position callback
+- **API:** `SimpleMap::update_speed_indicator(float speed_kmh)`
+
 ### 3.4 Display Brightness Functions
 
 #### FR-3.4.1 AMOLED Brightness Control
@@ -315,12 +330,13 @@ The system provides:
 
 #### FR-3.5.4 GPS Marker Display
 - **Description:** Show current GPS position on map
-- **Appearance:** Circular marker with optional heading indicator
+- **Appearance:** Directional triangle marker (48x48 pixels, red)
 - **Behavior:**
   - Marker centered on GPS coordinates
-  - Heading arrow shown when moving (speed > 1 km/h)
-  - Map can optionally auto-center on GPS position
-- **API:** `SimpleMap::set_gps_position(lat, lon, valid, heading)`
+  - Heading arrow rotates based on course (when speed > 1 km/h)
+  - Map auto-centers on GPS position (unless user scrolled within 30 seconds)
+  - Speed/pace indicator updated with current speed
+- **API:** `SimpleMap::set_gps_position(lat, lon, valid, heading, speed_kmh)`
 
 ### 3.6 Battery Monitor Functions
 
@@ -491,6 +507,16 @@ public:
 
     // Update battery indicator (0-100 percent, -1 for unknown/no battery)
     static void update_battery_indicator(int percent, bool is_charging = false);
+
+    // Update speed/pace indicator (speed in km/h, -1 to clear)
+    static void update_speed_indicator(float speed_kmh);
+
+    // GPS position with heading and speed
+    static void set_gps_position(double lat, double lon, bool valid,
+                                  float heading = -1.0f, float speed_kmh = -1.0f);
+
+    // GPS status indicator
+    static void update_gps_status(int satellites, int fix_type);
 
     // Set tile type (for multiple tile sets)
     static bool set_tile_type(int tile_type);
@@ -848,5 +874,6 @@ The SimpleMap component is designed for portability across ESP32 platforms:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 1.2 | 2026-01-31 | Claude Opus 4.5 | Added speed/pace status bar indicator (FR-3.3.5), updated GPS marker API to include speed parameter |
 | 1.1 | 2026-01-31 | Claude Opus 4.5 | Added GPS UART support (LC76G via GPIO18), AXP2101 battery monitoring, GPS/battery functional requirements and API documentation |
 | 1.0 | 2026-01-29 | Claude Opus 4.5 | Initial release for AMOLED 1.75" board |
