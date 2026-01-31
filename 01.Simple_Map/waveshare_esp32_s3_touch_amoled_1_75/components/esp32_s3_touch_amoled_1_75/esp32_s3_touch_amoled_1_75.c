@@ -244,17 +244,17 @@ esp_err_t bsp_lc76g_get_nmea(char **nmea_out, size_t *length_out)
 
     // Step 1: Send query command to 0x50
     uint8_t init_cmd[] = {0x08, 0x00, 0x51, 0xAA, 0x04, 0x00, 0x00, 0x00};
-    ret = i2c_master_transmit(write_dev_handle, init_cmd, sizeof(init_cmd), 100);
+    ret = i2c_master_transmit(write_dev_handle, init_cmd, sizeof(init_cmd), 1000);
     if (ret != ESP_OK) {
-        ESP_LOGD(TAG, "GPS query command failed: %s", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "GPS Step 1 (query cmd to 0x50) failed: %s", esp_err_to_name(ret));
         return ESP_FAIL;
     }
     vTaskDelay(pdMS_TO_TICKS(100));
 
     // Step 2: Read length from 0x54
-    ret = i2c_master_receive(read_dev_handle, readData, sizeof(readData), 100);
+    ret = i2c_master_receive(read_dev_handle, readData, sizeof(readData), 1000);
     if (ret != ESP_OK) {
-        ESP_LOGD(TAG, "GPS read length failed: %s", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "GPS Step 2 (read len from 0x54) failed: %s", esp_err_to_name(ret));
         return ESP_FAIL;
     }
     uint32_t dataLength = (readData[0]) | (readData[1] << 8) |
@@ -270,9 +270,9 @@ esp_err_t bsp_lc76g_get_nmea(char **nmea_out, size_t *length_out)
     memcpy(send_buf, header, sizeof(header));
     memcpy(send_buf + sizeof(header), readData, sizeof(readData));
     vTaskDelay(pdMS_TO_TICKS(100));
-    ret = i2c_master_transmit(write_dev_handle, send_buf, sizeof(send_buf), 100);
+    ret = i2c_master_transmit(write_dev_handle, send_buf, sizeof(send_buf), 1000);
     if (ret != ESP_OK) {
-        ESP_LOGD(TAG, "GPS read data command failed: %s", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "GPS Step 3 (read data cmd to 0x50) failed: %s", esp_err_to_name(ret));
         return ESP_FAIL;
     }
 
@@ -283,9 +283,9 @@ esp_err_t bsp_lc76g_get_nmea(char **nmea_out, size_t *length_out)
     }
     vTaskDelay(pdMS_TO_TICKS(100));
 
-    ret = i2c_master_receive(read_dev_handle, dynamicReadData, dataLength, 100);
+    ret = i2c_master_receive(read_dev_handle, dynamicReadData, dataLength, 1000);
     if (ret != ESP_OK) {
-        ESP_LOGD(TAG, "GPS read NMEA data failed: %s", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "GPS Step 4 (read NMEA from 0x54) failed: %s", esp_err_to_name(ret));
         free(dynamicReadData);
         return ret;
     }
