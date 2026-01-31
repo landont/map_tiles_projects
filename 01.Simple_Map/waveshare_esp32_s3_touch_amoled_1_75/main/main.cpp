@@ -120,6 +120,11 @@ extern "C" void app_main(void)
 
     bsp_display_unlock();
 
-    // Initialize battery monitor
-    battery_monitor_init(bsp_i2c_get_handle());
+    // Initialize and start battery monitor
+    if (battery_monitor_init(bsp_i2c_get_handle()) == ESP_OK) {
+        battery_monitor_start(5000);  // Update every 5 seconds
+        printf("Battery monitor started\n");
+    } else {
+        printf("Battery monitor initialization failed\n");
+    }
 }

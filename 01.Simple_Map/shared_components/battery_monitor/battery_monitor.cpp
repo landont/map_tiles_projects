@@ -9,7 +9,14 @@
 #include "driver/i2c_master.h"
 #include "bsp/esp-bsp.h"
 #include "simple_map.hpp"
+
+// Optional GPS I2C mutex - only used when GPS is on I2C bus
+#if __has_include("gps_lc76g_i2c.h")
 #include "gps_lc76g_i2c.h"
+#define HAS_GPS_I2C_MUTEX 1
+#else
+#define HAS_GPS_I2C_MUTEX 0
+#endif
 
 #define XPOWERS_CHIP_AXP2101
 #include "XPowersLib.h"
@@ -28,10 +35,14 @@ static bool initialized = false;
 static bool backlight_dimmed = false;
 static const uint32_t BACKLIGHT_DIM_TIMEOUT_MS = 15000;  // 15 seconds
 
-// Get shared I2C mutex from GPS module
+// Get shared I2C mutex from GPS module (only when GPS uses I2C)
 static SemaphoreHandle_t get_i2c_mutex(void)
 {
+#if HAS_GPS_I2C_MUTEX
     return (SemaphoreHandle_t)gps_i2c_get_mutex();
+#else
+    return nullptr;  // No mutex needed when GPS uses UART
+#endif
 }
 
 // I2C read/write callbacks for XPowersLib
