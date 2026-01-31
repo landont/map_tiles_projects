@@ -44,6 +44,7 @@ uint32_t SimpleMap::last_gps_update_time = 0;
 uint32_t SimpleMap::last_touch_time = 0;
 map_tiles_handle_t SimpleMap::map_handle = nullptr;
 bool SimpleMap::is_round_display = false;
+bool SimpleMap::is_programmatic_scroll = false;
 
 bool SimpleMap::init(lv_obj_t* parent_screen) {
     if (initialized) return true;
@@ -1013,7 +1014,11 @@ void SimpleMap::map_scroll_event_cb(lv_event_t *e)
 {
     if (!initialized || !map_handle) return;
 
-    reset_activity_timer();  // Reset backlight timer on scroll
+    // Skip activity timer reset and user scroll detection for programmatic scrolls
+    // (e.g., auto-centering on GPS position)
+    if (!is_programmatic_scroll) {
+        reset_activity_timer();  // Reset backlight timer on scroll
+    }
 
     lv_event_code_t event_code = lv_event_get_code(e);
 
@@ -1026,11 +1031,14 @@ void SimpleMap::map_scroll_event_cb(lv_event_t *e)
         }
 
         // Mark that user has manually scrolled (for auto-center feature)
-        if (!user_scrolled) {
-            user_scrolled = true;
-            printf("SimpleMap: User scroll detected\n");
+        // Skip this for programmatic scrolls (GPS centering)
+        if (!is_programmatic_scroll) {
+            if (!user_scrolled) {
+                user_scrolled = true;
+                printf("SimpleMap: User scroll detected\n");
+            }
+            last_user_scroll_time = current_time;
         }
-        last_user_scroll_time = current_time;
 
         return;
     }
@@ -1160,7 +1168,10 @@ void SimpleMap::center_map_on_gps()
     int center_scroll_y = abs_py - top_left_px_y - lv_obj_get_height(map_container) / 2;
 
     // Apply the scroll to center the GPS coordinates
+    // Set flag to ignore this scroll in the event callback (prevents activity timer reset)
+    is_programmatic_scroll = true;
     lv_obj_scroll_to(map_container, center_scroll_x, center_scroll_y, LV_ANIM_OFF);
+    is_programmatic_scroll = false;
 
     // Update GPS marker position after centering
     update_gps_marker_position();

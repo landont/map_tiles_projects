@@ -119,6 +119,7 @@ private:
     static bool initialized;
     static bool is_loading;  // Flag to prevent multiple simultaneous loads
     static bool user_scrolled;  // Flag indicating user has manually scrolled
+    static bool is_programmatic_scroll;  // Flag to ignore scroll events during GPS centering
     static uint32_t last_scroll_time;  // Timestamp of last scroll event
     static uint32_t last_user_scroll_time;  // Timestamp of last user scroll
     static uint32_t last_gps_update_time;  // Timestamp of last GPS update
