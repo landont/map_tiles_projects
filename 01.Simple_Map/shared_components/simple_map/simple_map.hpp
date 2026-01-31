@@ -113,8 +113,8 @@ private:
     static TrackPoint track_log[TRACK_LOG_MAX_POINTS];
     static int track_log_count;          // Number of points in track log
     static int track_log_start;          // Index of oldest point (circular buffer)
-    static lv_obj_t** track_dots;        // Array of yellow dot objects for track visualization
-    static int track_dots_count;         // Number of allocated track dot objects
+    static lv_obj_t* track_line;         // Line object for track visualization
+    static lv_point_precise_t* track_line_points;  // Points array for track line
     static double current_lat;
     static double current_lon;
     static double gps_lat;               // Actual GPS latitude

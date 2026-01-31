@@ -35,8 +35,8 @@ float SimpleMap::gps_heading = -1.0f;
 TrackPoint SimpleMap::track_log[TRACK_LOG_MAX_POINTS] = {};
 int SimpleMap::track_log_count = 0;
 int SimpleMap::track_log_start = 0;
-lv_obj_t** SimpleMap::track_dots = nullptr;
-int SimpleMap::track_dots_count = 0;
+lv_obj_t* SimpleMap::track_line = nullptr;
+lv_point_precise_t* SimpleMap::track_line_points = nullptr;
 int SimpleMap::current_zoom = 15;
 bool SimpleMap::initialized = false;
 bool SimpleMap::is_loading = false;
@@ -303,11 +303,17 @@ void SimpleMap::create_gps_indicator(lv_obj_t* parent_screen) {
     // Create GPS direction arrow marker on the map - initially hidden
     create_direction_arrow();
 
-    // Allocate track dots array (will be populated as track points are added)
-    track_dots = (lv_obj_t**)calloc(TRACK_LOG_MAX_POINTS, sizeof(lv_obj_t*));
-    track_dots_count = 0;
+    // Allocate track line points array
+    track_line_points = (lv_point_precise_t*)calloc(TRACK_LOG_MAX_POINTS, sizeof(lv_point_precise_t));
 
-    printf("SimpleMap: GPS indicator initialized with direction arrow and track log\n");
+    // Create track line object
+    track_line = lv_line_create(map_group);
+    lv_obj_set_style_line_width(track_line, 2, 0);
+    lv_obj_set_style_line_color(track_line, lv_color_make(255, 50, 50), 0);  // Red line
+    lv_obj_set_style_line_rounded(track_line, true, 0);
+    lv_obj_clear_flag(track_line, LV_OBJ_FLAG_CLICKABLE);
+
+    printf("SimpleMap: GPS indicator initialized with direction arrow and track line\n");
 }
 
 void SimpleMap::create_speed_indicator(lv_obj_t* parent_screen) {
@@ -389,7 +395,7 @@ void SimpleMap::create_direction_arrow() {
     lv_obj_clear_flag(gps_marker, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(gps_marker, LV_OBJ_FLAG_HIDDEN);
 
-    lv_color_t red = lv_color_make(255, 50, 50);
+    lv_color_t blue = lv_color_make(50, 100, 255);
 
     // Create a simple filled triangle using stacked trapezoids
     // Narrow triangle pointing up: ~36px tall, ~16px base (doubled)
@@ -398,7 +404,7 @@ void SimpleMap::create_direction_arrow() {
     lv_obj_t* bottom = lv_obj_create(gps_marker);
     lv_obj_set_size(bottom, 16, 8);
     lv_obj_set_pos(bottom, 16, 34);
-    lv_obj_set_style_bg_color(bottom, red, 0);
+    lv_obj_set_style_bg_color(bottom, blue, 0);
     lv_obj_set_style_bg_opa(bottom, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(bottom, 0, 0);
     lv_obj_set_style_radius(bottom, 0, 0);
@@ -408,7 +414,7 @@ void SimpleMap::create_direction_arrow() {
     lv_obj_t* mid_bot = lv_obj_create(gps_marker);
     lv_obj_set_size(mid_bot, 12, 8);
     lv_obj_set_pos(mid_bot, 18, 26);
-    lv_obj_set_style_bg_color(mid_bot, red, 0);
+    lv_obj_set_style_bg_color(mid_bot, blue, 0);
     lv_obj_set_style_bg_opa(mid_bot, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(mid_bot, 0, 0);
     lv_obj_set_style_radius(mid_bot, 0, 0);
@@ -418,9 +424,9 @@ void SimpleMap::create_direction_arrow() {
     lv_obj_t* mid_top = lv_obj_create(gps_marker);
     lv_obj_set_size(mid_top, 8, 8);
     lv_obj_set_pos(mid_top, 20, 18);
-    lv_obj_set_style_bg_color(mid_top, red, 0);
+    lv_obj_set_style_bg_color(mid_top, blue, 0);
     lv_obj_set_style_bg_opa(mid_top, LV_OPA_COVER, 0);
-    lv_obj_set_style_border_width(mid_top, 0, 0);
+    lv_obj_set_style_border_width(mid_bot, 0, 0);
     lv_obj_set_style_radius(mid_top, 0, 0);
     lv_obj_clear_flag(mid_top, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -428,7 +434,7 @@ void SimpleMap::create_direction_arrow() {
     lv_obj_t* tip = lv_obj_create(gps_marker);
     lv_obj_set_size(tip, 4, 10);
     lv_obj_set_pos(tip, 22, 8);
-    lv_obj_set_style_bg_color(tip, red, 0);
+    lv_obj_set_style_bg_color(tip, blue, 0);
     lv_obj_set_style_bg_opa(tip, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(tip, 0, 0);
     lv_obj_set_style_radius(tip, 0, 0);
@@ -692,21 +698,6 @@ void SimpleMap::add_track_point(double lat, double lon) {
     track_log[new_idx].latitude = lat;
     track_log[new_idx].longitude = lon;
     track_log[new_idx].timestamp = now;
-
-    // Create yellow dot for this track point if not already created
-    if (track_dots[new_idx] == nullptr && map_group) {
-        track_dots[new_idx] = lv_obj_create(map_group);
-        lv_obj_set_size(track_dots[new_idx], 8, 8);  // Slightly larger for visibility
-        lv_obj_set_style_bg_color(track_dots[new_idx], lv_color_make(255, 200, 0), 0);  // Bright yellow
-        lv_obj_set_style_bg_opa(track_dots[new_idx], LV_OPA_COVER, 0);
-        lv_obj_set_style_border_width(track_dots[new_idx], 1, 0);
-        lv_obj_set_style_border_color(track_dots[new_idx], lv_color_make(200, 150, 0), 0);  // Darker border
-        lv_obj_set_style_radius(track_dots[new_idx], 4, 0);  // Circular
-        lv_obj_clear_flag(track_dots[new_idx], LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_clear_flag(track_dots[new_idx], LV_OBJ_FLAG_CLICKABLE);
-        printf("SimpleMap: Created track dot %d\n", new_idx);
-    }
-
 }
 
 void SimpleMap::prune_old_track_points() {
@@ -727,68 +718,62 @@ void SimpleMap::prune_old_track_points() {
             break;  // Oldest point is still within time window
         }
 
-        // Hide the dot for this removed point
-        if (track_dots && track_dots[oldest_idx]) {
-            lv_obj_add_flag(track_dots[oldest_idx], LV_OBJ_FLAG_HIDDEN);
-        }
-
         track_log_start = (track_log_start + 1) % TRACK_LOG_MAX_POINTS;
         track_log_count--;
     }
 }
 
 void SimpleMap::update_track_dots_positions() {
-    if (!track_dots || !map_handle || track_log_count == 0) return;
+    if (!track_line || !track_line_points || !map_handle || track_log_count == 0) {
+        // Hide line if no points
+        if (track_line) {
+            lv_line_set_points(track_line, NULL, 0);
+        }
+        return;
+    }
 
     // Get current tile position
     int tile_x, tile_y;
     map_tiles_get_position(map_handle, &tile_x, &tile_y);
 
-    int visible_count = 0;
+    int point_count = 0;
 
-    // Update position of each track dot
+    // Build points array for the line
     for (int i = 0; i < track_log_count; i++) {
         int idx = (track_log_start + i) % TRACK_LOG_MAX_POINTS;
-
-        if (track_dots[idx] == nullptr) continue;
 
         // Convert GPS to tile coordinates
         double x, y;
         map_tiles_gps_to_tile_xy(map_handle, track_log[idx].latitude, track_log[idx].longitude, &x, &y);
 
         // Calculate pixel position relative to the map_group
-        int dot_x = (int)((x - tile_x) * MAP_TILES_TILE_SIZE) - 4;  // Center the 8px dot
-        int dot_y = (int)((y - tile_y) * MAP_TILES_TILE_SIZE) - 4;
+        int px = (int)((x - tile_x) * MAP_TILES_TILE_SIZE);
+        int py = (int)((y - tile_y) * MAP_TILES_TILE_SIZE);
 
-        // Check if dot is within visible tile area
-        bool in_bounds = (x >= tile_x && x < tile_x + grid_cols &&
-                          y >= tile_y && y < tile_y + grid_rows);
+        track_line_points[point_count].x = px;
+        track_line_points[point_count].y = py;
+        point_count++;
+    }
 
-        if (in_bounds) {
-            lv_obj_set_pos(track_dots[idx], dot_x, dot_y);
-            lv_obj_clear_flag(track_dots[idx], LV_OBJ_FLAG_HIDDEN);
-            lv_obj_move_foreground(track_dots[idx]);
-            visible_count++;
-        } else {
-            lv_obj_add_flag(track_dots[idx], LV_OBJ_FLAG_HIDDEN);
-        }
+    // Update the line with new points
+    if (point_count > 1) {
+        lv_line_set_points(track_line, track_line_points, point_count);
+        lv_obj_move_foreground(track_line);
+    } else {
+        lv_line_set_points(track_line, NULL, 0);
     }
 
     // Log every 50 updates
     static int update_counter = 0;
     if (++update_counter % 50 == 0 && track_log_count > 0) {
-        printf("SimpleMap: Track dots update - count=%d, visible=%d\n", track_log_count, visible_count);
+        printf("SimpleMap: Track line update - points=%d\n", point_count);
     }
 }
 
 void SimpleMap::clear_track_log() {
-    // Hide all track dots
-    if (track_dots) {
-        for (int i = 0; i < TRACK_LOG_MAX_POINTS; i++) {
-            if (track_dots[i]) {
-                lv_obj_add_flag(track_dots[i], LV_OBJ_FLAG_HIDDEN);
-            }
-        }
+    // Clear track line
+    if (track_line) {
+        lv_line_set_points(track_line, NULL, 0);
     }
 
     // Reset track log
@@ -1425,14 +1410,14 @@ void SimpleMap::cleanup() {
         tile_widgets = nullptr;
     }
 
-    // Clean up track dots array (dots are cleaned up with map_group)
-    if (track_dots) {
-        free(track_dots);
-        track_dots = nullptr;
+    // Clean up track line (line object cleaned up with map_group)
+    track_line = nullptr;
+    if (track_line_points) {
+        free(track_line_points);
+        track_line_points = nullptr;
     }
     track_log_count = 0;
     track_log_start = 0;
-    track_dots_count = 0;
 
     // Reset cached grid dimensions
     grid_cols = 0;
