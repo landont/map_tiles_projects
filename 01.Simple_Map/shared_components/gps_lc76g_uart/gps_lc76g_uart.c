@@ -436,6 +436,69 @@ static void gps_uart_task(void *pvParameters)
     vTaskDelete(NULL);
 }
 
+// Try to detect the correct baud rate by looking for valid NMEA data
+static int detect_baud_rate(void)
+{
+    static const int baud_rates[] = {9600, 115200, 38400, 57600, 4800, 19200};
+    static const int num_rates = sizeof(baud_rates) / sizeof(baud_rates[0]);
+
+    uint8_t buffer[128];
+
+    for (int i = 0; i < num_rates; i++) {
+        int baud = baud_rates[i];
+        ESP_LOGI(TAG, "Trying baud rate: %d...", baud);
+
+        // Change baud rate
+        uart_set_baudrate(GPS_UART_NUM, baud);
+
+        // Flush any garbage
+        uart_flush_input(GPS_UART_NUM);
+        vTaskDelay(pdMS_TO_TICKS(100));
+
+        // Read data for up to 2 seconds
+        int valid_chars = 0;
+        int total_chars = 0;
+        int dollar_signs = 0;
+        uint32_t start = esp_timer_get_time() / 1000;
+
+        while ((esp_timer_get_time() / 1000 - start) < 2000) {
+            int len = uart_read_bytes(GPS_UART_NUM, buffer, sizeof(buffer) - 1, pdMS_TO_TICKS(100));
+            if (len > 0) {
+                buffer[len] = '\0';
+                total_chars += len;
+
+                for (int j = 0; j < len; j++) {
+                    // Count valid ASCII printable chars and common NMEA chars
+                    if ((buffer[j] >= 32 && buffer[j] <= 126) ||
+                        buffer[j] == '\r' || buffer[j] == '\n') {
+                        valid_chars++;
+                    }
+                    if (buffer[j] == '$') {
+                        dollar_signs++;
+                    }
+                }
+            }
+        }
+
+        if (total_chars > 0) {
+            int valid_percent = (valid_chars * 100) / total_chars;
+            ESP_LOGI(TAG, "  Baud %d: %d bytes, %d%% valid ASCII, %d '$' signs",
+                     baud, total_chars, valid_percent, dollar_signs);
+
+            // If >90% valid ASCII and we saw some $ signs, this is likely correct
+            if (valid_percent > 90 && dollar_signs >= 2) {
+                ESP_LOGI(TAG, "  >>> Detected correct baud rate: %d", baud);
+                return baud;
+            }
+        } else {
+            ESP_LOGW(TAG, "  Baud %d: No data received", baud);
+        }
+    }
+
+    ESP_LOGW(TAG, "Could not auto-detect baud rate, defaulting to %d", GPS_UART_BAUD);
+    return GPS_UART_BAUD;
+}
+
 esp_err_t gps_uart_init(void)
 {
     if (gps_initialized) {
@@ -445,6 +508,7 @@ esp_err_t gps_uart_init(void)
 
     ESP_LOGI(TAG, "Initializing LC76G GNSS module (UART on GPIO%d)...", GPS_UART_RX_PIN);
 
+    // Start with default baud rate for driver install
     uart_config_t uart_config = {
         .baud_rate = GPS_UART_BAUD,
         .data_bits = UART_DATA_8_BITS,
@@ -476,11 +540,25 @@ esp_err_t gps_uart_init(void)
         return ret;
     }
 
+    // Auto-detect baud rate
+    ESP_LOGI(TAG, "========================================");
+    ESP_LOGI(TAG, "Auto-detecting GPS baud rate...");
+    ESP_LOGI(TAG, "========================================");
+
+    int detected_baud = detect_baud_rate();
+    if (detected_baud != GPS_UART_BAUD) {
+        ESP_LOGI(TAG, "Setting baud rate to detected: %d", detected_baud);
+        uart_set_baudrate(GPS_UART_NUM, detected_baud);
+    }
+
+    // Flush buffer after baud rate detection
+    uart_flush_input(GPS_UART_NUM);
+
     memset(&current_gps_data, 0, sizeof(current_gps_data));
     gps_initialized = true;
 
     ESP_LOGI(TAG, "========================================");
-    ESP_LOGI(TAG, "GPS UART initialized successfully!");
+    ESP_LOGI(TAG, "GPS UART initialized at %d baud", detected_baud);
     ESP_LOGI(TAG, "Waiting for GPS fix...");
     ESP_LOGI(TAG, "========================================");
 
