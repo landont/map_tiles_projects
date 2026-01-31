@@ -91,39 +91,24 @@ static const sh8601_lcd_init_cmd_t lcd_init_cmds[] = {
  **************************************************************************************************/
 esp_err_t bsp_i2c_init(void)
 {
-    /* I2C was initialized before */
-    if (i2c_initialized)
-    {
-        return ESP_OK;
-    }
-
-    i2c_master_bus_config_t i2c_bus_conf = {
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .sda_io_num = BSP_I2C_SDA,
-        .scl_io_num = BSP_I2C_SCL,
-        .i2c_port = BSP_I2C_NUM,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = true,
-        .trans_queue_depth = 0,
-    };
-    BSP_ERROR_CHECK_RETURN_ERR(i2c_new_master_bus(&i2c_bus_conf, &i2c_handle));
-
-    i2c_initialized = true;
-
-    return ESP_OK;
+    // Redirect to legacy I2C init to avoid driver conflicts with GPS
+    // The new I2C master driver doesn't support LC76G's dual-address scheme
+    return bsp_legacy_i2c_init();
 }
 
 esp_err_t bsp_i2c_deinit(void)
 {
-    BSP_ERROR_CHECK_RETURN_ERR(i2c_del_master_bus(i2c_handle));
-    i2c_initialized = false;
+    // Legacy driver - use i2c_bus_delete if needed
+    // For now, just return OK (legacy bus persists for lifetime)
     return ESP_OK;
 }
 
 i2c_master_bus_handle_t bsp_i2c_get_handle(void)
 {
-    bsp_i2c_init();
-    return i2c_handle;
+    // WARNING: New I2C driver is disabled due to GPS dual-address conflict
+    // This function returns NULL - callers should use legacy i2c_bus instead
+    ESP_LOGW(TAG, "bsp_i2c_get_handle() called but new I2C driver is disabled for GPS compatibility");
+    return NULL;
 }
 
 esp_err_t bsp_spiffs_mount(void)
